@@ -10,11 +10,14 @@ int main() {
     return 1;
   }
 
+  int width, height;
   Window_Event event;
   while(window.running) {
     while(window_peek(&window, &event)) ;
+
+    if(!window_get_window_size(&window, &width, &height)) return 1;
     
-    glViewport(0, 0, 400, 400);
+    glViewport(0, 0, width, height);
     glClear(GL_COLOR_BUFFER_BIT);
     glClearColor(1, 0, 0, 1);
 

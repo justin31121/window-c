@@ -128,11 +128,27 @@ int main() {
   glUseProgram(program);
 
   int width, height;
+  if(!window_get_window_size(&window, &width, &height)) return 1;
+  int mouse_x = width;
+  int mouse_y = height;
+  bool dragging = false;
+  
   Window_Event event;
   while(window.running) {
-    while(window_peek(&window, &event)) ;
+    while(window_peek(&window, &event)) {
+      if(event.type == WINDOW_EVENT_KEYPRESS) window.running = false;
+      else if(event.type == WINDOW_EVENT_MOUSEPRESS) dragging = true;
+      else if(event.type == WINDOW_EVENT_MOUSERELEASE) dragging = false;
+    }
 
     if(!window_get_window_size(&window, &width, &height)) return 1;
+    if(dragging) {
+      if(!window_get_mouse_position(&window, &mouse_x, &mouse_y)) return 1;
+      if(mouse_x > width) mouse_x = width;
+      if(mouse_x < 0) mouse_x = 0;
+      if(mouse_y > height) mouse_y = height;
+      if(mouse_y < 0) mouse_y = 0;
+    }    
     
     glViewport(0, 0, width, height);
     glClear(GL_COLOR_BUFFER_BIT);
@@ -146,7 +162,7 @@ int main() {
     glUniform1fv(glGetUniformLocation(program, "resolution_y"), 1, &heightf);
 
     // render triangles:
-    push_triangle(vec2f(0, heightf/2), vec2f(widthf/2, heightf), vec2f(widthf, 0),
+    push_triangle(vec2f(0, heightf/2), vec2f(widthf/2, heightf), vec2f((float) mouse_x, heightf - (float) mouse_y),
 		  vec4f(1, 0, 0, 1),
 		  vec4f(0, 1, 0, 1),
 		  vec4f(0, 0, 1, 1));

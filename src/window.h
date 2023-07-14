@@ -18,24 +18,33 @@
 #endif //WINDOW_DEF
 
 typedef enum{
-  WINDOW_EVENT_TYPE_NONE = 0,
+  WINDOW_EVENT_NONE = 0,
+  WINDOW_EVENT_KEYPRESS,
+  WINDOW_EVENT_KEYRELEASE,
+  WINDOW_EVENT_MOUSEPRESS,
+  WINDOW_EVENT_MOUSERELEASE,
 }Window_Event_Type;
 
 typedef struct{
   MSG msg;
   Window_Event_Type type;
+  union{
+    char key;
+  }as;
 }Window_Event;
 
 typedef struct{
   HWND hwnd;
   HDC dc;
   RECT rect;
+  POINT point;
   bool running;
 }Window;
 
 WINDOW_DEF bool window_init(Window *w, int width, int height, const char *title);
 WINDOW_DEF bool window_peek(Window *w, Window_Event *event);
 WINDOW_DEF bool window_get_window_size(Window *w, int *width, int *height);
+WINDOW_DEF bool window_get_mouse_position(Window *w, int *width, int *height);
 WINDOW_DEF void window_swap_buffers(Window *w);
 WINDOW_DEF void window_free(Window *w);
 
@@ -223,14 +232,51 @@ WINDOW_DEF bool window_peek(Window *w, Window_Event *e) {
     TranslateMessage(msg);
     DispatchMessage(msg);
 
-    e->type = WINDOW_EVENT_TYPE_NONE;
+    e->type = WINDOW_EVENT_NONE;
 
     switch(msg->message) {
+    case WM_RBUTTONUP:  {
+      e->type = WINDOW_EVENT_MOUSERELEASE;
+      e->as.key = 'R';
+      ReleaseCapture();
+    } break;
+    case WM_RBUTTONDOWN: {
+      e->type = WINDOW_EVENT_MOUSEPRESS;
+      e->as.key = 'R';
+      SetCapture(w->hwnd);
+    } break;
+    case WM_LBUTTONUP: {
+      e->type = WINDOW_EVENT_MOUSERELEASE;
+      e->as.key = 'L';
+      ReleaseCapture();
+    } break;
+    case WM_LBUTTONDOWN: {
+      e->type = WINDOW_EVENT_MOUSEPRESS;
+      e->as.key = 'L';
+      SetCapture(w->hwnd);
+    } break;
+    case WM_SYSKEYDOWN:
+    case WM_SYSKEYUP:
+    case WM_KEYDOWN:
+    case WM_KEYUP: {
+      bool was_down = ((msg->lParam & (1 << 30)) != 0);
+      bool is_down = ((msg->lParam & (1 << 31)) == 0);
+
+      if(was_down != is_down) {
+	e->as.key = (char) msg->wParam;
+	if(was_down) {
+	  e->type = WINDOW_EVENT_KEYRELEASE;
+	} else {
+	  e->type = WINDOW_EVENT_KEYPRESS;
+	}
+      }
+      
+    } break;
     default: {
     } break;
     }
 
-    if(e->type != WINDOW_EVENT_TYPE_NONE) {
+    if(e->type != WINDOW_EVENT_NONE) {
       return true;
     }
   }
@@ -245,6 +291,16 @@ WINDOW_DEF bool window_get_window_size(Window *w, int *width, int *height) {
     *height = (w->rect.bottom - w->rect.top);
   }
   return result;
+}
+
+WINDOW_DEF bool window_get_mouse_position(Window *w, int *width, int *height) {
+  if(GetCursorPos(&w->point) && ScreenToClient(w->hwnd, &w->point)) {
+    *width = w->point.x;
+    *height = w->point.y;
+    return true;
+  }
+
+  return false;
 }
   
 WINDOW_DEF void window_swap_buffers(Window *w) {

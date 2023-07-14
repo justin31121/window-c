@@ -13,7 +13,9 @@ int main() {
   int width, height;
   Window_Event event;
   while(window.running) {
-    while(window_peek(&window, &event)) ;
+    while(window_peek(&window, &event)) {
+      if(event.type == WINDOW_EVENT_KEYPRESS) window.running = false;
+    }
 
     if(!window_get_window_size(&window, &width, &height)) return 1;
     

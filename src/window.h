@@ -9,6 +9,7 @@
 #  include <stdio.h>
 #endif //WINDOW_VERBOSE
 #include <stdbool.h>
+#include <math.h>
 
 #include <windows.h>
 #include <GL/GL.h>
@@ -60,9 +61,10 @@ WINDOW_DEF bool window_link_program(GLuint *program, GLuint vertex_shader, GLuin
 #define vec4f(x, y, z, w) window_renderer_vec4f((x), (y), (z), (w))
 #define draw_triangle(p1, p2, p3, c1, c2, c3, uv1, uv2, uv3) window_renderer_triangle(&(window_renderer), (p1), (p2), (p3), (c1), (c2), (c3), (uv1), (uv2), (uv3))
 #define draw_solid_triangle(p1, p2, p3, c1) window_renderer_solid_triangle(&(window_renderer), (p1), (p2), (p3), c1)
-#define draw_rect(pos, size, color) window_renderer_solid_rect(&(window_renderer), (pos), (size), (color))
+#define draw_solid_rect(pos, size, color) window_renderer_solid_rect(&(window_renderer), (pos), (size), (color))
 #define push_texture(w, h, d, g, index) window_renderer_push_texture(&(window_renderer), (w), (h), (d), (g), (index))
 #define draw_texture(p, s, uvp, uvs) window_renderer_texture(&(window_renderer), (p), (s), (uvp), (uvs))
+#define draw_solid_circle(p, r, parts, c) window_renderer_solid_circle(&(window_renderer), (p), (r), (parts), (c))
 
 typedef struct{
   float x, y;
@@ -105,10 +107,11 @@ WINDOW_DEF void window_renderer_begin(Window_Renderer *r, int width, int height)
 WINDOW_DEF void window_renderer_vertex(Window_Renderer *r, Window_Renderer_Vec2f p, Window_Renderer_Vec4f c, Window_Renderer_Vec2f uv);
 WINDOW_DEF void window_renderer_triangle(Window_Renderer *r, Window_Renderer_Vec2f p1, Window_Renderer_Vec2f p2, Window_Renderer_Vec2f p3, Window_Renderer_Vec4f c1, Window_Renderer_Vec4f c2, Window_Renderer_Vec4f c3, Window_Renderer_Vec2f uv1, Window_Renderer_Vec2f uv2, Window_Renderer_Vec2f uv3);
 WINDOW_DEF window_renderer_solid_triangle(Window_Renderer *r, Window_Renderer_Vec2f p1, Window_Renderer_Vec2f p2, Window_Renderer_Vec2f p3, Window_Renderer_Vec4f c);
-WINDOW_DEF void window_renderer_quad(Window_Renderer *r, Vec2f p1, Vec2f p2, Vec2f p3, Vec2f p4, Vec4f c1, Vec4f c2, Vec4f c3, Vec4f c4, Vec2f uv1, Vec2f uv2, Vec2f uv3, Vec2f uv4);
-WINDOW_DEF void window_renderer_solid_rect(Window_Renderer *r, Vec2f pos, Vec2f size, Vec4f color);
+WINDOW_DEF void window_renderer_quad(Window_Renderer *r, Window_Renderer_Vec2f p1, Window_Renderer_Vec2f p2, Window_Renderer_Vec2f p3, Window_Renderer_Vec2f p4,Window_Renderer_Vec4f c1,Window_Renderer_Vec4f c2,Window_Renderer_Vec4f c3,Window_Renderer_Vec4f c4, Window_Renderer_Vec2f uv1, Window_Renderer_Vec2f uv2, Window_Renderer_Vec2f uv3, Window_Renderer_Vec2f uv4);
+WINDOW_DEF void window_renderer_solid_rect(Window_Renderer *r, Window_Renderer_Vec2f pos, Window_Renderer_Vec2f size,Window_Renderer_Vec4f color);
 WINDOW_DEF bool window_renderer_push_texture(Window_Renderer *r, int width, int height, const void *data, bool grey, unsigned int *index);
 WINDOW_DEF void window_renderer_texture(Window_Renderer *r, Window_Renderer_Vec2f p, Window_Renderer_Vec2f s, Window_Renderer_Vec2f uvp, Window_Renderer_Vec2f uvs);
+WINDOW_DEF void window_renderer_solid_circle(Window_Renderer *r, Window_Renderer_Vec2f pos, float radius, int parts, Window_Renderer_Vec4f color);
 WINDOW_DEF void window_renderer_end(Window_Renderer *r);
 WINDOW_DEF void window_renderer_free(Window_Renderer *r);
 
@@ -232,6 +235,7 @@ WINDOW_DEF bool window_init(Window *w, int width, int height, const char *title)
   wc.lpszClassName = title;
   wc.cbWndExtra = sizeof(LONG_PTR);
   wc.cbClsExtra = 0;
+  wc.hCursor = LoadCursor(NULL, IDC_ARROW);
   if(!RegisterClassEx(&wc)) {
     return false;
   }
@@ -649,6 +653,25 @@ WINDOW_DEF void window_renderer_texture(Window_Renderer *r, Window_Renderer_Vec2
 		window_renderer_vec2f(uvp.x + uvs.x, uvp.y),
 		window_renderer_vec2f(uvp.x, uvp.y + uvs.y),
 		window_renderer_vec2f(uvp.x + uvs.x, uvp.y + uvs.y));
+}
+
+WINDOW_DEF void window_renderer_solid_circle(Window_Renderer *r, Window_Renderer_Vec2f pos, float radius, int parts, Window_Renderer_Vec4f color) {
+  
+#define PI 3.141592653589793f
+
+    Window_Renderer_Vec2f old = {radius, 0};
+  for(int j=1;j<=parts;j++) {
+    Window_Renderer_Vec2f new =
+      {radius * cosf(2 * PI * ((float) j ) / ((float) parts)),
+       radius * sinf(2 * PI * ((float) j ) / ((float) parts))};
+    window_renderer_solid_triangle(r,
+				   pos,
+				   window_renderer_vec2f(pos.x + new.x, pos.y + new.y),
+				   window_renderer_vec2f(pos.x + old.x, pos.y + old.y),
+				   color );
+    old = new;
+  }
+  
 }
 
 WINDOW_DEF bool window_renderer_push_texture(Window_Renderer *r, int width, int height, const void *data, bool grey, unsigned int *index) {

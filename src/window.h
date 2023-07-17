@@ -75,6 +75,15 @@ WINDOW_DEF bool window_link_program(GLuint *program, GLuint vertex_shader, GLuin
 #define GL_RGB 0x1907
 #define GL_BGR 0x80E0
 
+#define GL_MULTISAMPLE 0x809D
+#define GL_MULTISAMPLE_ARB 0x809D
+#define GL_MULTISAMPLE_BIT 0x20000000
+#define GL_MULTISAMPLE_BIT_ARB 0x20000000
+#define GL_MULTISAMPLE_FILTER_HINT_NV 0x8534
+#define GL_SAMPLE_ALPHA_TO_COVERAGE 0x809E
+#define GL_SAMPLE_BUFFERS 0x80A8
+#define GL_SAMPLES 0x80A9
+
 typedef ptrdiff_t GLsizeiptr;
 typedef ptrdiff_t GLintptr;
 typedef char GLchar;
@@ -108,6 +117,7 @@ GLint glGetUniformLocation(GLuint program, const GLchar *name);
 void glGetActiveUniform(GLuint program, GLuint index, GLsizei bufSize, GLsizei *length, GLint *size, GLenum *type, GLchar *name);
 void glGetUniformfv(GLuint program, GLint location, GLfloat *params);
 void glGetUniformiv(GLuint program, GLint location, GLsizei bufSize, GLint *params);
+void glSampleCoverage(GLfloat value, GLboolean invert);
 int wglSwapIntervalEXT(GLint interval);
 
 #ifdef WINDOW_IMPLEMENTATION
@@ -184,29 +194,32 @@ WINDOW_DEF bool window_init(Window *w, int width, int height, const char *title)
   w->dc = GetDC(w->hwnd);
 
   //BEGIN opengl
-  HDC w_dc = GetDC(w->hwnd);
+  //HDC w_dc = GetDC(w->hwnd);
 
   PIXELFORMATDESCRIPTOR desired_format = {0};
   desired_format.nSize = sizeof(desired_format);
   desired_format.nVersion = 1;
   desired_format.dwFlags = PFD_SUPPORT_OPENGL|PFD_DRAW_TO_WINDOW|PFD_DOUBLEBUFFER;
-  desired_format.cColorBits = 32;
-  desired_format.cAlphaBits = 8;
+  desired_format.iPixelType = PFD_TYPE_RGBA;
+  desired_format.cColorBits = 32; // 24
+  desired_format.cAlphaBits =  8; // 16
+  desired_format.cDepthBits = 16;
+  desired_format.iLayerType = PFD_MAIN_PLANE;
 
-  int suggested_format_index = ChoosePixelFormat(w_dc, &desired_format);
+  int suggested_format_index = ChoosePixelFormat(w->dc, &desired_format);
   PIXELFORMATDESCRIPTOR suggested_format;
-  DescribePixelFormat(w_dc, suggested_format_index, sizeof(suggested_format), &suggested_format);
-  SetPixelFormat(w_dc, suggested_format_index, &suggested_format);
+  DescribePixelFormat(w->dc, suggested_format_index, sizeof(suggested_format), &suggested_format);
+  SetPixelFormat(w->dc, suggested_format_index, &suggested_format);
   
-  HGLRC opengl_rc = wglCreateContext(w_dc);
-  if(!wglMakeCurrent(w_dc, opengl_rc)) {
+  HGLRC opengl_rc = wglCreateContext(w->dc);
+  if(!wglMakeCurrent(w->dc, opengl_rc)) {
     return false;
   }
-  ReleaseDC(w->hwnd, w_dc);
+  //ReleaseDC(w->hwnd, w_dc);
   //END opengl
 
   LONG_PTR lptr = {0};
-  memcpy(&lptr, &w, sizeof(w));  
+  memcpy(&lptr, &w, sizeof(w));
   SetWindowLongPtr(w->hwnd, 0, lptr);  
 
   ShowWindow(w->hwnd, nCmdShow);
@@ -517,6 +530,11 @@ int wglSwapIntervalEXT(GLint interval) {
   return (int) _wglSwapIntervalEXT(interval);
 }
 
+PROC _glSampleCoverage = NULL;
+void glSampleCoverage(GLfloat value, GLboolean invert) {
+  _glSampleCoverage(value, invert);
+}
+
 
 WINDOW_DEF void window_win32_opengl_init() {
   if(_glActiveTexture != NULL) {
@@ -552,6 +570,7 @@ WINDOW_DEF void window_win32_opengl_init() {
   _glUniform1fv= wglGetProcAddress("glUniform1fv");
   _glUniform2fv= wglGetProcAddress("glUniform2fv");
   _glGetUniformiv= wglGetProcAddress("glGetUniformiv");
+  _glSampleCoverage = wglGetProcAddress("glSampleCoverage");
   _wglSwapIntervalEXT = wglGetProcAddress("wglSwapIntervalEXT");
 }
 

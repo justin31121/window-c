@@ -78,13 +78,12 @@ void push_triangle(Vec2f p1, Vec2f p2, Vec2f p3,
 int main() {
 
   Window window;
-  if(!window_init(&window, 400, 400, "Window")) {
+  if(!window_init(&window, 800, 800, "Shaders")) {
     return 1;
   }
 
-  GLuint vao, vbo;
-  
   // introduce 'verticies' to opengl
+  GLuint vao, vbo;
   glGenVertexArrays(1, &vao);
   glBindVertexArray(vao);
 
@@ -132,11 +131,18 @@ int main() {
   int mouse_x = width;
   int mouse_y = height;
   bool dragging = false;
+
+  GLint iMultiSample = -1;
+  GLint iNumSamples = -1;
+  glGetIntegerv(GL_SAMPLE_BUFFERS, &iMultiSample);
+  glGetIntegerv(GL_SAMPLES, &iNumSamples);
+  printf("MSAA on, GL_SAMPLE_BUFFERS = %d, GL_SAMPLES = %d\n", iMultiSample, iNumSamples);
   
   Window_Event event;
   while(window.running) {
     while(window_peek(&window, &event)) {
-      if(event.type == WINDOW_EVENT_KEYPRESS) window.running = false;
+      if(event.type == WINDOW_EVENT_KEYPRESS && event.as.key == 'Q')
+	window.running = false;
       else if(event.type == WINDOW_EVENT_MOUSEPRESS) dragging = true;
       else if(event.type == WINDOW_EVENT_MOUSERELEASE) dragging = false;
     }
@@ -148,10 +154,10 @@ int main() {
       if(mouse_x < 0) mouse_x = 0;
       if(mouse_y > height) mouse_y = height;
       if(mouse_y < 0) mouse_y = 0;
-    }    
+    }
     
     glViewport(0, 0, width, height);
-    glClear(GL_COLOR_BUFFER_BIT);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glClearColor(0, 0, 0, 1);
 
     float widthf = (float) width;
@@ -162,7 +168,7 @@ int main() {
     glUniform1fv(glGetUniformLocation(program, "resolution_y"), 1, &heightf);
 
     // render triangles:
-    push_triangle(vec2f(0, heightf/2), vec2f(widthf/2, heightf), vec2f((float) mouse_x, heightf - (float) mouse_y),
+    push_triangle(vec2f(0, 0), vec2f(widthf/2, heightf), vec2f((float) mouse_x, heightf - (float) mouse_y),
 		  vec4f(1, 0, 0, 1),
 		  vec4f(0, 1, 0, 1),
 		  vec4f(0, 0, 1, 1));

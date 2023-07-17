@@ -42,6 +42,7 @@ typedef struct{
 }Window;
 
 WINDOW_DEF bool window_init(Window *w, int width, int height, const char *title);
+WINDOW_DEF bool window_set_vsync(Window *w, bool use_vsync);
 WINDOW_DEF bool window_peek(Window *w, Window_Event *event);
 WINDOW_DEF bool window_get_window_size(Window *w, int *width, int *height);
 WINDOW_DEF bool window_get_mouse_position(Window *w, int *width, int *height);
@@ -50,6 +51,69 @@ WINDOW_DEF void window_free(Window *w);
 
 WINDOW_DEF bool window_compile_shader(GLuint *shader, GLenum shader_type, const char *shader_source);
 WINDOW_DEF bool window_link_program(GLuint *program, GLuint vertex_shader, GLuint fragment_shader);
+
+#ifndef WINDOW_NO_RENDERER
+
+#define Vec2f Window_Renderer_Vec2f
+#define vec2f(x, y) window_renderer_vec2f((x), (y))
+#define Vec4f Window_Renderer_Vec4f
+#define vec4f(x, y, z, w) window_renderer_vec4f((x), (y), (z), (w))
+#define draw_triangle(p1, p2, p3, c1, c2, c3, uv1, uv2, uv3) window_renderer_triangle(&(window_renderer), (p1), (p2), (p3), (c1), (c2), (c3), (uv1), (uv2), (uv3))
+#define draw_solid_triangle(p1, p2, p3, c1) window_renderer_solid_triangle(&(window_renderer), (p1), (p2), (p3), c1)
+#define draw_rect(pos, size, color) window_renderer_solid_rect(&(window_renderer), (pos), (size), (color))
+#define push_texture(w, h, d, g, index) window_renderer_push_texture(&(window_renderer), (w), (h), (d), (g), (index))
+#define draw_texture(p, s, uvp, uvs) window_renderer_texture(&(window_renderer), (p), (s), (uvp), (uvs))
+
+typedef struct{
+  float x, y;
+}Window_Renderer_Vec2f;
+
+WINDOW_DEF Window_Renderer_Vec2f window_renderer_vec2f(float x, float y);
+
+typedef struct{
+  float x, y, z, w;
+}Window_Renderer_Vec4f;
+
+WINDOW_DEF Window_Renderer_Vec4f window_renderer_vec4f(float x, float y, float z, float w);
+
+typedef struct{
+  Window_Renderer_Vec2f position;
+  Window_Renderer_Vec4f color;
+  Window_Renderer_Vec2f uv;
+}Window_Renderer_Vertex;
+
+#define WINDOW_RENDERER_VERTEX_ATTR_POSITION 0
+#define WINDOW_RENDERER_VERTEX_ATTR_COLOR 1
+#define WINDOW_RENDERER_VERTEX_ATTR_UV 2
+
+#define WINDOW_RENDERER_CAP 1024
+
+typedef struct{
+  GLuint vao, vbo;
+  GLuint vertex_shader, fragment_shader;
+  GLuint program;
+  
+  GLuint textures;
+  unsigned int images_count;
+
+  Window_Renderer_Vertex verticies[WINDOW_RENDERER_CAP];
+  int verticies_count;
+}Window_Renderer;
+
+WINDOW_DEF bool window_renderer_init(Window_Renderer *r);
+WINDOW_DEF void window_renderer_begin(Window_Renderer *r, int width, int height);
+WINDOW_DEF void window_renderer_vertex(Window_Renderer *r, Window_Renderer_Vec2f p, Window_Renderer_Vec4f c, Window_Renderer_Vec2f uv);
+WINDOW_DEF void window_renderer_triangle(Window_Renderer *r, Window_Renderer_Vec2f p1, Window_Renderer_Vec2f p2, Window_Renderer_Vec2f p3, Window_Renderer_Vec4f c1, Window_Renderer_Vec4f c2, Window_Renderer_Vec4f c3, Window_Renderer_Vec2f uv1, Window_Renderer_Vec2f uv2, Window_Renderer_Vec2f uv3);
+WINDOW_DEF window_renderer_solid_triangle(Window_Renderer *r, Window_Renderer_Vec2f p1, Window_Renderer_Vec2f p2, Window_Renderer_Vec2f p3, Window_Renderer_Vec4f c);
+WINDOW_DEF void window_renderer_quad(Window_Renderer *r, Vec2f p1, Vec2f p2, Vec2f p3, Vec2f p4, Vec4f c1, Vec4f c2, Vec4f c3, Vec4f c4, Vec2f uv1, Vec2f uv2, Vec2f uv3, Vec2f uv4);
+WINDOW_DEF void window_renderer_solid_rect(Window_Renderer *r, Vec2f pos, Vec2f size, Vec4f color);
+WINDOW_DEF bool window_renderer_push_texture(Window_Renderer *r, int width, int height, const void *data, bool grey, unsigned int *index);
+WINDOW_DEF void window_renderer_texture(Window_Renderer *r, Window_Renderer_Vec2f p, Window_Renderer_Vec2f s, Window_Renderer_Vec2f uvp, Window_Renderer_Vec2f uvs);
+WINDOW_DEF void window_renderer_end(Window_Renderer *r);
+WINDOW_DEF void window_renderer_free(Window_Renderer *r);
+
+#endif //WINDOW_NO_RENDERER
+
 
 // opengl - functions / types / definitions
 #define GL_TEXTURE0 0x84C0
@@ -70,6 +134,8 @@ WINDOW_DEF bool window_link_program(GLuint *program, GLuint vertex_shader, GLuin
 #define GL_CLAMP_TO_EDGE 0x812F
 #define GL_RGB_INTEGER 0x8D98
 #define GL_UNSIGNED_INT_8_8_8_8_REV 0x8367
+#define GL_MULTISAMPLE  0x809D
+#define GL_SAMPLES 0x80A9
 
 #define GL_BGRA 0x80E1
 #define GL_RGB 0x1907
@@ -121,6 +187,11 @@ void glSampleCoverage(GLfloat value, GLboolean invert);
 int wglSwapIntervalEXT(GLint interval);
 
 #ifdef WINDOW_IMPLEMENTATION
+
+#ifndef WINDOW_NO_RENDERER
+static Window_Renderer window_renderer;
+static bool window_renderer_inited = false;
+#endif //WINDOW_NO_RENDERER
 
 LRESULT CALLBACK Window_Implementation_WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
 
@@ -194,32 +265,29 @@ WINDOW_DEF bool window_init(Window *w, int width, int height, const char *title)
   w->dc = GetDC(w->hwnd);
 
   //BEGIN opengl
-  //HDC w_dc = GetDC(w->hwnd);
+  HDC w_dc = GetDC(w->hwnd);
 
   PIXELFORMATDESCRIPTOR desired_format = {0};
   desired_format.nSize = sizeof(desired_format);
   desired_format.nVersion = 1;
   desired_format.dwFlags = PFD_SUPPORT_OPENGL|PFD_DRAW_TO_WINDOW|PFD_DOUBLEBUFFER;
-  desired_format.iPixelType = PFD_TYPE_RGBA;
-  desired_format.cColorBits = 32; // 24
-  desired_format.cAlphaBits =  8; // 16
-  desired_format.cDepthBits = 16;
-  desired_format.iLayerType = PFD_MAIN_PLANE;
+  desired_format.cColorBits = 32;
+  desired_format.cAlphaBits = 8;
 
-  int suggested_format_index = ChoosePixelFormat(w->dc, &desired_format);
+  int suggested_format_index = ChoosePixelFormat(w_dc, &desired_format);
   PIXELFORMATDESCRIPTOR suggested_format;
-  DescribePixelFormat(w->dc, suggested_format_index, sizeof(suggested_format), &suggested_format);
-  SetPixelFormat(w->dc, suggested_format_index, &suggested_format);
+  DescribePixelFormat(w_dc, suggested_format_index, sizeof(suggested_format), &suggested_format);
+  SetPixelFormat(w_dc, suggested_format_index, &suggested_format);
   
-  HGLRC opengl_rc = wglCreateContext(w->dc);
-  if(!wglMakeCurrent(w->dc, opengl_rc)) {
+  HGLRC opengl_rc = wglCreateContext(w_dc);
+  if(!wglMakeCurrent(w_dc, opengl_rc)) {
     return false;
   }
-  //ReleaseDC(w->hwnd, w_dc);
+  ReleaseDC(w->hwnd, w_dc);
   //END opengl
 
   LONG_PTR lptr = {0};
-  memcpy(&lptr, &w, sizeof(w));
+  memcpy(&lptr, &w, sizeof(w));  
   SetWindowLongPtr(w->hwnd, 0, lptr);  
 
   ShowWindow(w->hwnd, nCmdShow);
@@ -230,7 +298,27 @@ WINDOW_DEF bool window_init(Window *w, int width, int height, const char *title)
   // load non-default-opengl-functions
   window_win32_opengl_init();
 
+#ifndef WINDOW_NO_RENDERER
+  if(!window_renderer_inited) {
+    if(!window_renderer_init(&window_renderer)) {
+      return false;	    
+    }
+	
+    window_renderer_inited = true;
+  }
+#endif //WINDOW_NO_RENDERER
+
+  // use vsync as default
+  if(!window_set_vsync(w, true)) {
+    return false;
+  }
+
   return true;
+}
+
+WINDOW_DEF bool window_set_vsync(Window *w, bool use_vsync) {
+  (void) w;
+  return wglSwapIntervalEXT(use_vsync ? 1 : 0);
 }
 
 WINDOW_DEF bool window_peek(Window *w, Window_Event *e) {
@@ -320,7 +408,7 @@ WINDOW_DEF void window_swap_buffers(Window *w) {
   SwapBuffers(w->dc);
 }
 
-WINDOW_DEF void window_free(Window *w) {
+WINDOW_DEF void window_free(Window *w) {	
   ReleaseDC(w->hwnd, w->dc);
   DestroyWindow(w->hwnd);
 }
@@ -337,50 +425,303 @@ WINDOW_DEF const char *window_shader_type_name(GLenum shader) {
 }
 
 WINDOW_DEF bool window_compile_shader(GLuint *shader, GLenum shader_type, const char *shader_source) {
-    *shader = glCreateShader(shader_type);
-    glShaderSource(*shader, 1, &shader_source, NULL);
-    glCompileShader(*shader);
+  *shader = glCreateShader(shader_type);
+  glShaderSource(*shader, 1, &shader_source, NULL);
+  glCompileShader(*shader);
 
-    GLint compiled = 0;
-    glGetShaderiv(*shader, GL_COMPILE_STATUS, &compiled);
+  GLint compiled = 0;
+  glGetShaderiv(*shader, GL_COMPILE_STATUS, &compiled);
 
-    if (!compiled) {
+  if (!compiled) {
 #ifdef WINDOW_VERBOSE
-	GLchar message[1024];
-	GLsizei message_size = 0;
-	glGetShaderInfoLog(*shader, sizeof(message), &message_size, message);
-	fprintf(stderr, "ERROR: could not compile %s\n", window_shader_type_name(shader_type));
-	fprintf(stderr, "%.*s\n", message_size, message);
+    GLchar message[1024];
+    GLsizei message_size = 0;
+    glGetShaderInfoLog(*shader, sizeof(message), &message_size, message);
+    fprintf(stderr, "ERROR: could not compile %s\n", window_shader_type_name(shader_type));
+    fprintf(stderr, "%.*s\n", message_size, message);
 #endif //WINDOW_VERBOSE
-	return false;
-    }
+    return false;
+  }
 
-    return true;
+  return true;
 }
 
 WINDOW_DEF bool window_link_program(GLuint *program, GLuint vertex_shader, GLuint fragment_shader) {
-    *program = glCreateProgram();
-    glAttachShader(*program, vertex_shader);
-    glAttachShader(*program, fragment_shader);
+  *program = glCreateProgram();
+  glAttachShader(*program, vertex_shader);
+  glAttachShader(*program, fragment_shader);
 
-    glLinkProgram(*program);
+  glLinkProgram(*program);
   
-    GLint linked = 0;
-    glGetProgramiv(*program, GL_LINK_STATUS, &linked);
-    if(!linked) {
+  GLint linked = 0;
+  glGetProgramiv(*program, GL_LINK_STATUS, &linked);
+  if(!linked) {
 #ifdef WINDOW_VERBOSE
-	GLsizei message_size = 0;
-	GLchar message[1024];
+    GLsizei message_size = 0;
+    GLchar message[1024];
 
-	glGetProgramInfoLog(*program, sizeof(message), &message_size, message);
-	fprintf(stderr, "ERROR: Program Linking: %.*s\n", message_size, message);
+    glGetProgramInfoLog(*program, sizeof(message), &message_size, message);
+    fprintf(stderr, "ERROR: Program Linking: %.*s\n", message_size, message);
 #endif //WINDOW_VERBOSE
-	return false;
-    }
+    return false;
+  }
   
-    return true;
+  return true;
     
 }
+
+////////////////////////////////////////////////////////////////////////
+// renderer - definitions
+////////////////////////////////////////////////////////////////////////
+
+#ifndef WINDOW_NO_RENDERER
+
+static const char* window_renderer_vertex_shader_source =
+  "#version 330 core\n"
+  "\n"
+  "layout(location = 0) in vec2 position;\n"
+  "layout(location = 1) in vec4 color;\n"
+  "layout(location = 2) in vec2 uv;\n"
+  "\n"
+  "uniform float resolution_x;\n"
+  "uniform float resolution_y;\n"
+  "\n"
+  "out vec4 out_color;\n"
+  "out vec2 out_uv;\n"
+  "\n"
+  "vec2 resolution_project(vec2 point) {\n"
+  "    return 2 * point / vec2(resolution_x, resolution_y) - 1;\n"
+  "}\n"
+  "\n"
+  "void main() {\n"
+  "  out_color = color;\n"
+  "  out_uv = uv;\n"
+  "  gl_Position = vec4(resolution_project(position), 0, 1);\n"
+  "}";
+
+static const char *window_renderer_fragment_shader_source=
+  "#version 330 core\n"
+  "\n"
+  "uniform sampler2D texture0;\n"
+  "\n"
+  "in vec4 out_color;\n"
+  "in vec2 out_uv;\n"
+  "\n"
+  "out vec4 fragColor;\n"
+  "\n"
+  "void main() {\n"
+  "    if(out_uv.x <= 0 && out_uv.y <= 0) {\n"
+  "        fragColor = out_color;\n"
+  "    } else {\n"
+  "        vec4 color = texture(texture0, vec2(out_uv.x, 1-out_uv.y));\n"
+  "        color.w = color.w * out_color.w;\n"
+  "        fragColor = color;\n"
+  "    }\n"
+  "}\n";
+
+WINDOW_DEF Window_Renderer_Vec2f window_renderer_vec2f(float x, float y) {
+  return (Window_Renderer_Vec2f) { x, y};
+}
+
+WINDOW_DEF Window_Renderer_Vec4f window_renderer_vec4f(float x, float y, float z, float w) {
+  return (Window_Renderer_Vec4f) { x, y, z, w};
+}
+
+WINDOW_DEF bool window_renderer_init(Window_Renderer *r) {
+  // introduce 'verticies' to opengl
+  glGenVertexArrays(1, &r->vao);
+  glBindVertexArray(r->vao);
+
+  glGenBuffers(1, &r->vbo);
+  glBindBuffer(GL_ARRAY_BUFFER, r->vbo);
+  glBufferData(GL_ARRAY_BUFFER, sizeof(r->verticies), r->verticies, GL_DYNAMIC_DRAW);
+
+  // introduce 'Vertex' to opengl
+  glEnableVertexAttribArray(WINDOW_RENDERER_VERTEX_ATTR_POSITION);
+  glVertexAttribPointer(WINDOW_RENDERER_VERTEX_ATTR_POSITION,
+			sizeof(Window_Renderer_Vec2f)/sizeof(float),
+			GL_FLOAT,
+			GL_FALSE,
+			sizeof(Window_Renderer_Vertex),
+			(GLvoid *) offsetof(Window_Renderer_Vertex, position));
+
+  glEnableVertexAttribArray(WINDOW_RENDERER_VERTEX_ATTR_COLOR);
+  glVertexAttribPointer(WINDOW_RENDERER_VERTEX_ATTR_COLOR,
+			sizeof(Window_Renderer_Vec4f)/sizeof(float),
+			GL_FLOAT,
+			GL_FALSE,
+			sizeof(Window_Renderer_Vertex),
+			(GLvoid *) offsetof(Window_Renderer_Vertex, color));
+
+  glEnableVertexAttribArray(WINDOW_RENDERER_VERTEX_ATTR_UV);
+  glVertexAttribPointer(WINDOW_RENDERER_VERTEX_ATTR_UV,
+			sizeof(Window_Renderer_Vec2f)/sizeof(float),
+			GL_FLOAT,
+			GL_FALSE,
+			sizeof(Window_Renderer_Vertex),
+			(GLvoid *) offsetof(Window_Renderer_Vertex, uv));
+  
+  // compile shaders
+  if(!window_compile_shader(&r->vertex_shader, GL_VERTEX_SHADER, window_renderer_vertex_shader_source)) {
+    return false;
+  }
+    
+  if(!window_compile_shader(&r->fragment_shader, GL_FRAGMENT_SHADER, window_renderer_fragment_shader_source)) {
+    return false;
+  }
+
+  // link program
+  if(!window_link_program(&r->program, r->vertex_shader, r->fragment_shader)) {
+    return false;
+  }
+  glUseProgram(r->program);
+
+
+  r->images_count = 0;
+  r->verticies_count = 0;
+  
+  return true;
+}
+
+WINDOW_DEF void window_renderer_begin(Window_Renderer *r, int width, int height) {
+  glViewport(0, 0, width, height);
+  glClear(GL_COLOR_BUFFER_BIT);
+  glClearColor(0, 0, 0, 1);
+
+  float widthf = (float) width;
+  float heightf = (float) height;
+
+  // tell vertex shader what is the resolution is
+  glUniform1fv(glGetUniformLocation(r->program, "resolution_x"), 1, &widthf);
+  glUniform1fv(glGetUniformLocation(r->program, "resolution_y"), 1, &heightf);
+
+  //GLint uniformLocation = glGetUniformLocation(r->program, "texture0");
+  //glUniform1i(uniformLocation, (int) 0);
+}
+
+WINDOW_DEF void window_renderer_vertex(Window_Renderer *r, Window_Renderer_Vec2f p, Window_Renderer_Vec4f c, Window_Renderer_Vec2f uv) {
+  assert(r->verticies_count < WINDOW_RENDERER_CAP);
+  Window_Renderer_Vertex *last = &r->verticies[r->verticies_count];
+  last->position = p;
+  last->color = c;
+  last->uv = uv;
+  r->verticies_count++;    
+}
+
+WINDOW_DEF void window_renderer_triangle(Window_Renderer *r, Window_Renderer_Vec2f p1, Window_Renderer_Vec2f p2, Window_Renderer_Vec2f p3, Window_Renderer_Vec4f c1, Window_Renderer_Vec4f c2, Window_Renderer_Vec4f c3, Window_Renderer_Vec2f uv1, Window_Renderer_Vec2f uv2, Window_Renderer_Vec2f uv3) {
+  window_renderer_vertex(r, p1, c1, uv1);
+  window_renderer_vertex(r, p2, c2, uv2);
+  window_renderer_vertex(r, p3, c3, uv3);    
+}
+
+WINDOW_DEF window_renderer_solid_triangle(Window_Renderer *r, Window_Renderer_Vec2f p1, Window_Renderer_Vec2f p2, Window_Renderer_Vec2f p3, Window_Renderer_Vec4f c) {
+  Window_Renderer_Vec2f uv = window_renderer_vec2f(0, 0);
+  window_renderer_vertex(r, p1, c, uv);
+  window_renderer_vertex(r, p2, c, uv);
+  window_renderer_vertex(r, p3, c, uv);
+}
+
+WINDOW_DEF void window_renderer_quad(Window_Renderer *r, Window_Renderer_Vec2f p1, Window_Renderer_Vec2f p2, Window_Renderer_Vec2f p3, Window_Renderer_Vec2f p4, Window_Renderer_Vec4f c1, Window_Renderer_Vec4f c2, Window_Renderer_Vec4f c3, Window_Renderer_Vec4f c4, Window_Renderer_Vec2f uv1, Window_Renderer_Vec2f uv2, Window_Renderer_Vec2f uv3, Window_Renderer_Vec2f uv4) {
+  window_renderer_triangle(r, p1, p2, p4, c1, c2, c4, uv1, uv2, uv4);
+  window_renderer_triangle(r, p1, p3, p4, c1, c3, c4, uv1, uv3, uv4);
+}
+
+WINDOW_DEF void window_renderer_solid_rect(Window_Renderer *r, Window_Renderer_Vec2f pos, Window_Renderer_Vec2f size, Window_Renderer_Vec4f color) {
+  Vec2f uv = vec2f(0, 0);
+  window_renderer_quad(r, pos,
+		       window_renderer_vec2f(pos.x + size.y, pos.y),
+		       window_renderer_vec2f(pos.x, pos.y+size.y),
+		       window_renderer_vec2f(pos.x + size.x, pos.y + size.y),
+		       color, color, color, color, uv, uv, uv, uv);
+}
+
+WINDOW_DEF void window_renderer_texture(Window_Renderer *r, Window_Renderer_Vec2f p, Window_Renderer_Vec2f s, Window_Renderer_Vec2f uvp, Window_Renderer_Vec2f uvs)
+{
+  Vec4f c = vec4f(1, 1, 1, 1);
+  window_renderer_quad(
+		r,
+		p,
+		window_renderer_vec2f(p.x + s.x, p.y),
+		window_renderer_vec2f(p.x, p.y + s.y),
+		window_renderer_vec2f(p.x + s.x, p.y + s.y),
+		c, c, c, c,
+		uvp,
+		window_renderer_vec2f(uvp.x + uvs.x, uvp.y),
+		window_renderer_vec2f(uvp.x, uvp.y + uvs.y),
+		window_renderer_vec2f(uvp.x + uvs.x, uvp.y + uvs.y));
+}
+
+WINDOW_DEF bool window_renderer_push_texture(Window_Renderer *r, int width, int height, const void *data, bool grey, unsigned int *index) {
+
+  GLenum current_texture;
+  switch(r->images_count) {
+  case 0:
+    current_texture = GL_TEXTURE0;
+    break;
+  case 1:
+    current_texture = GL_TEXTURE1;
+    break;
+  case 2:
+    current_texture = GL_TEXTURE2;
+    break;
+  case 3:
+    current_texture = GL_TEXTURE3;
+    break;
+  default:
+    return false;
+  }
+  
+  glActiveTexture(current_texture);
+  
+  glGenTextures(1, &r->textures);
+  glBindTexture(GL_TEXTURE_2D, r->textures);
+
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+  glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+
+  if(grey) {
+    glTexImage2D(GL_TEXTURE_2D,
+		 0,
+		 GL_RED,
+		 width,
+		 height,
+		 0,
+		 GL_RED,
+		 GL_UNSIGNED_BYTE,
+		 data);
+  } else {
+    glTexImage2D(GL_TEXTURE_2D,
+		 0,
+		 GL_RGBA,
+		 width,
+		 height,
+		 0,
+		 GL_RGBA,
+		 GL_UNSIGNED_INT_8_8_8_8_REV,
+		 data);
+  }
+
+
+  *index = r->images_count++;
+
+  return true;
+}
+
+WINDOW_DEF void window_renderer_end(Window_Renderer *r) {
+  glBufferSubData(GL_ARRAY_BUFFER, 0, r->verticies_count * sizeof(Window_Renderer_Vertex), r->verticies);
+  glDrawArrays(GL_TRIANGLES, 0, r->verticies_count);
+  r->verticies_count = 0;
+}
+
+WINDOW_DEF void window_renderer_free(Window_Renderer *r) {
+  (void) r;
+}
+
+#endif //WINDOW_NO_RENDERER
 
 ////////////////////////////////////////////////////////////////////////
 // opengl - definitions
@@ -570,7 +911,6 @@ WINDOW_DEF void window_win32_opengl_init() {
   _glUniform1fv= wglGetProcAddress("glUniform1fv");
   _glUniform2fv= wglGetProcAddress("glUniform2fv");
   _glGetUniformiv= wglGetProcAddress("glGetUniformiv");
-  _glSampleCoverage = wglGetProcAddress("glSampleCoverage");
   _wglSwapIntervalEXT = wglGetProcAddress("wglSwapIntervalEXT");
 }
 

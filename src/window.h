@@ -537,7 +537,7 @@ static const char *window_renderer_fragment_shader_source=
     "#version 330 core\n"
     "\n"
     "uniform sampler2D font_tex;\n"
-    "uniform sampler2D texture;\n"
+    "uniform sampler2D tex;\n"
     "\n"
     "in vec4 out_color;\n"
     "in vec2 out_uv;\n"
@@ -554,7 +554,7 @@ static const char *window_renderer_fragment_shader_source=
     "        color.w = a;\n"
     "        fragColor = color;\n"
     "    } else {\n"
-    "        vec4 color = texture(texture, vec2(out_uv.x, 1-out_uv.y));\n"
+    "        vec4 color = texture(tex, vec2(out_uv.x, 1-out_uv.y));\n"
     "        color = color * out_color;\n"
     "        fragColor = color;\n"
     "    }\n"
@@ -724,7 +724,7 @@ WINDOW_DEF void window_renderer_texture(Window_Renderer *r, unsigned int texture
 
     if(r->tex_index == -1) {
 	r->tex_index = (int) texture;
-	GLint uniformLocation1 = glGetUniformLocation(r->program, "texture");
+	GLint uniformLocation1 = glGetUniformLocation(r->program, "tex");
 	glUniform1i(uniformLocation1, r->tex_index);
     } else {
 	//maybe flush ?
@@ -748,7 +748,7 @@ WINDOW_DEF void window_renderer_texture_colored(Window_Renderer *r, unsigned int
 {
     if(r->tex_index == -1) {
 	r->tex_index = (int) texture;
-	GLint uniformLocation1 = glGetUniformLocation(r->program, "texture");
+	GLint uniformLocation1 = glGetUniformLocation(r->program, "tex");
 	glUniform1i(uniformLocation1, r->tex_index);
     } else {
 	//maybe flush ? 

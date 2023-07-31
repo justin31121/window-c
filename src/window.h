@@ -53,11 +53,16 @@ typedef struct{
   HDC dc;
   RECT rect;
   POINT point;
-  bool running;
+  int running;
+
+  int width, height;
 }Window;
 
-#define WINDOW_NOT_RESIZABLE 0x1
-#define WINDOW_DRAG_N_DROP   0x2
+#define WINDOW_RUNNING       0x1
+#define WINDOW_NOT_RESIZABLE 0x2
+#define WINDOW_DRAG_N_DROP   0x4
+#define WINDOW_FULLSCREEN    0x8
+#define WINDOW_MAXIMIZED     0x16
 
 WINDOW_DEF bool window_init(Window *w, int width, int height, const char *title, int flags);
 WINDOW_DEF bool window_set_vsync(Window *w, bool use_vsync);
@@ -65,6 +70,7 @@ WINDOW_DEF bool window_peek(Window *w, Window_Event *event);
 WINDOW_DEF bool window_get_window_size(Window *w, int *width, int *height);
 WINDOW_DEF bool window_get_mouse_position(Window *w, int *width, int *height);
 WINDOW_DEF void window_swap_buffers(Window *w);
+WINDOW_DEF bool window_toggle_fullscreen(Window *w);
 WINDOW_DEF void window_free(Window *w);
 
 WINDOW_DEF bool window_dragged_files_init(Window_Dragged_Files *files, Window_Event *event);
@@ -140,7 +146,7 @@ static Window_Renderer_Vec4f BLACK = {0, 0, 0, 1};
 
 #ifdef __STB_INCLUDE_STB_TRUETYPE_H__
 #  define push_font window_renderer_push_font
-#  define draw_text (cstr, pos, factor) window_renderer_text(&(window_renderer), (cstr), strlen((cstr)), (pos), (factor), (WHITE))
+#  define draw_text(cstr, pos, factor) window_renderer_text((cstr), strlen((cstr)), (pos), (factor), (WHITE))
 #  define draw_text_colored(cstr, pos, factor, color) window_renderer_text((cstr), strlen((cstr)), (pos), (factor), (color))
 #  define draw_text_len(cstr, cstr_len, pos, factor) window_renderer_text((cstr), (cstr_len), (pos), (factor), (WHITE))
 #  define draw_text_len_colored(cstr, cstr_len, pos, factor, color) window_renderer_text(&(window_renderer), (cstr), (cstr_len), (pos), (factor), (color))
@@ -249,17 +255,11 @@ static bool window_renderer_inited = false;
 
 LRESULT CALLBACK Window_Implementation_WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
 
-  if(message == WM_CLOSE) {
+  if(message == WM_CLOSE ||
+     message == WM_DESTROY) {
     Window *w = (Window *) GetWindowLongPtr(hWnd, 0);
     if(w != NULL) {
-      w->running = false;
-    }
-    PostQuitMessage(0);
-    return 0;
-  } else if(message == WM_DESTROY) {
-    Window *w = (Window *) GetWindowLongPtr(hWnd, 0);
-    if(w != NULL) {
-      w->running = false;
+      w->running = 0;
     }
     PostQuitMessage(0);
     return 0;
@@ -307,8 +307,14 @@ WINDOW_DEF bool window_init(Window *w, int width, int height, const char *title,
     style |= WS_THICKFRAME | WS_MAXIMIZEBOX;
   }
 
-  //add space for taskbar
+  //add space  
+  width += 16;
   height += 39;
+
+  if(flags & WINDOW_MAXIMIZED) {
+    width = GetSystemMetrics(SM_CXFULLSCREEN);
+    height = GetSystemMetrics(SM_CYFULLSCREEN);
+  }
 
   DWORD window_flags = 0;
   if((flags & WINDOW_DRAG_N_DROP)) {
@@ -361,7 +367,9 @@ WINDOW_DEF bool window_init(Window *w, int width, int height, const char *title,
   ShowWindow(w->hwnd, nCmdShow);
   UpdateWindow(w->hwnd);
 
-  w->running = true;
+  w->running = WINDOW_RUNNING;
+  w->width = width;
+  w->height = height;
 
   // load non-default-opengl-functions
   window_win32_opengl_init();
@@ -395,7 +403,7 @@ WINDOW_DEF bool window_peek(Window *w, Window_Event *e) {
 
   while(true) {
     if(!PeekMessage(msg, w->hwnd, 0, 0, PM_REMOVE)) {
-      return false;
+      break;
     }
 
     TranslateMessage(msg);
@@ -454,16 +462,14 @@ WINDOW_DEF bool window_peek(Window *w, Window_Event *e) {
     }
   }
 
-  return false;
-}
-
-WINDOW_DEF bool window_get_window_size(Window *w, int *width, int *height) {
-  bool result = GetClientRect(w->hwnd, &w->rect);
-  if(result) {
-    *width = (w->rect.right - w->rect.left);
-    *height = (w->rect.bottom - w->rect.top);
+  if(!(w->running & WINDOW_FULLSCREEN)) {
+    if(GetClientRect(w->hwnd, &w->rect)) {
+      w->width = (w->rect.right - w->rect.left);
+      w->height = (w->rect.bottom - w->rect.top);
+    }
   }
-  return result;
+
+  return false;
 }
 
 WINDOW_DEF bool window_get_mouse_position(Window *w, int *width, int *height) {
@@ -478,6 +484,44 @@ WINDOW_DEF bool window_get_mouse_position(Window *w, int *width, int *height) {
   
 WINDOW_DEF void window_swap_buffers(Window *w) {
   SwapBuffers(w->dc);
+}
+
+WINDOW_DEF bool window_toggle_fullscreen(Window *w) {
+
+  DWORD style = GetWindowLongPtr(w->hwnd, GWL_STYLE);
+
+  if(w->running & WINDOW_FULLSCREEN) {
+
+    style &= ~WS_POPUP;
+    style |= WS_OVERLAPPEDWINDOW; // fix this
+    w->running &= ~WINDOW_FULLSCREEN;
+    
+    SetWindowPos(w->hwnd, NULL,
+		 w->rect.left,
+		 w->rect.top,
+		 w->rect.right - w->rect.left,
+		 w->rect.bottom - w->rect.top,
+		 SWP_FRAMECHANGED);    
+  } else {    
+    if(!GetWindowRect(w->hwnd, &w->rect)) {
+      return false;
+    }
+
+    int width = GetSystemMetrics(SM_CXSCREEN);
+    int height = GetSystemMetrics(SM_CYSCREEN);
+
+    style &= ~WS_OVERLAPPEDWINDOW;
+    style |= WS_POPUP;
+    w->running |= WINDOW_FULLSCREEN;
+    w->width = width;
+    w->height = height;
+
+    SetWindowPos(w->hwnd, HWND_TOP, 0, 0, width, height, SWP_FRAMECHANGED);
+  }
+
+  SetWindowLongPtr(w->hwnd, GWL_STYLE, style);
+
+  return true;
 }
 
 WINDOW_DEF void window_free(Window *w) {	

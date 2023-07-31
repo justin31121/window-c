@@ -14,7 +14,7 @@
 int main() {
   
   Window window;
-  if(!window_init(&window, 800, 500, "Renderer", 0)) {
+  if(!window_init(&window, 400, 400, "Renderer", 0)) {
     return 1;
   }
   
@@ -29,23 +29,24 @@ int main() {
 
   int64_t time = 0.0f;
 
-  int width, height;
   int mouse_x = 0;
   int mouse_y = 0;
   Window_Event event;
   while(window.running) {
     while(window_peek(&window, &event)) {
-      if(event.type == WINDOW_EVENT_KEYPRESS &&
-	 event.as.key == 'Q') {
-	window.running = false;
+      if(event.type == WINDOW_EVENT_KEYPRESS) {
+	if(event.as.key == 'Q') {
+	  window.running = false;	  
+	} else if(event.as.key == 'K') {
+	  window_toggle_fullscreen(&window);
+	}
       }
     }
+    int width = window.width;
+    int height = window.height;
 
-    if(!window_get_window_size(&window, &width, &height)) {
-      return 1;
-    }
-    float widthf  = (float) width;
-    float heightf = (float) height;
+    float widthf  = (float) window.width;
+    float heightf = (float) window.height;
 
     if(window_get_mouse_position(&window, &mouse_x, &mouse_y)) {
       if(mouse_x > width) mouse_x = width;
@@ -75,6 +76,10 @@ int main() {
 
     draw_text_colored( "Text is only possible with stb_truetype.h!",
 		       vec2f(0, heightf/2), .8f, vec4f(1, 1, 1, .9) );
+
+    char buf[256];
+    snprintf(buf, sizeof(buf), "%d x %d", window.width, window.height);
+    draw_text(buf, vec2f(0, heightf - 64.0f * .8f), .8f );
 
     draw_solid_circle(vec2f((float) mouse_x, (float) mouse_y),
 		      10.0f,

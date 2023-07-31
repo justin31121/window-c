@@ -14,7 +14,7 @@
 int main() {
   
   Window window;
-  if(!window_init(&window, 800, 500, "Renderer")) {
+  if(!window_init(&window, 800, 500, "Renderer", 0)) {
     return 1;
   }
   
@@ -55,7 +55,7 @@ int main() {
       mouse_y = height - mouse_y;
     }
     
-    window_renderer_begin(&window_renderer, width, height);
+    window_renderer_begin(width, height);
 
     Vec2f uv = vec2f(-1, -1);
     draw_triangle(vec2f(0, 0), vec2f(widthf, 0), vec2f(widthf, heightf),
@@ -83,7 +83,7 @@ int main() {
 
     draw_solid_rect_angle( vec2f(width/2 - 50, height/2 - 50), vec2f(100, 100), time * 6 / 4 * PI / 1000 , vec4f(1, 0, 0, .4) );
 	
-    window_renderer_end(&window_renderer);
+    window_renderer_end();
     window_swap_buffers(&window);
 
     time += 16;

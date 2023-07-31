@@ -6,7 +6,7 @@
 int main() {
 
     Window window;
-    if(!window_init(&window, 400, 400, "Window")) {
+    if(!window_init(&window, 400, 400, "Window", WINDOW_DRAG_N_DROP)) {
 	return 1;
     }
     
@@ -15,6 +15,19 @@ int main() {
     while(window.running) {
 	while(window_peek(&window, &event)) {
 	    if(event.type == WINDOW_EVENT_KEYPRESS) window.running = false;
+	    else if(event.type == WINDOW_EVENT_FILEDROP) {
+	      Window_Dragged_Files files;
+	      if(window_dragged_files_init(&files, &event)) {
+
+		char *path;
+		while(window_dragged_files_next(&files, &path)) {
+		  printf("%s\n", path);
+		}
+		fflush(stdout);
+		
+		window_dragged_files_free(&files);
+	      }
+	    }
 	}
 
 	if(!window_get_window_size(&window, &width, &height)) return 1;

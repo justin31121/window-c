@@ -2,7 +2,7 @@
 #define WINDOW_H
 
 // win32
-//   msvc : user32.lib gdi32.lib opengl32.lib
+//   msvc : user32.lib gdi32.lib opengl32.lib (shell32.lib)
 //   mingw:
 
 #ifdef WINDOW_VERBOSE
@@ -28,6 +28,7 @@ typedef enum{
   WINDOW_EVENT_KEYRELEASE,
   WINDOW_EVENT_MOUSEPRESS,
   WINDOW_EVENT_MOUSERELEASE,
+  WINDOW_EVENT_FILEDROP,
 }Window_Event_Type;
 
 typedef struct{
@@ -35,8 +36,17 @@ typedef struct{
   Window_Event_Type type;
   union{
     char key;
+    long long value;
   }as;
 }Window_Event;
+
+typedef struct{
+  HDROP h_drop;
+  char path[MAX_PATH];
+
+  int count;
+  int index;
+}Window_Dragged_Files;
 
 typedef struct{
   HWND hwnd;
@@ -46,13 +56,20 @@ typedef struct{
   bool running;
 }Window;
 
-WINDOW_DEF bool window_init(Window *w, int width, int height, const char *title);
+#define WINDOW_NOT_RESIZABLE 0x1
+#define WINDOW_DRAG_N_DROP   0x2
+
+WINDOW_DEF bool window_init(Window *w, int width, int height, const char *title, int flags);
 WINDOW_DEF bool window_set_vsync(Window *w, bool use_vsync);
 WINDOW_DEF bool window_peek(Window *w, Window_Event *event);
 WINDOW_DEF bool window_get_window_size(Window *w, int *width, int *height);
 WINDOW_DEF bool window_get_mouse_position(Window *w, int *width, int *height);
 WINDOW_DEF void window_swap_buffers(Window *w);
 WINDOW_DEF void window_free(Window *w);
+
+WINDOW_DEF bool window_dragged_files_init(Window_Dragged_Files *files, Window_Event *event);
+WINDOW_DEF bool window_dragged_files_next(Window_Dragged_Files *files, char **path);
+WINDOW_DEF void window_dragged_files_free(Window_Dragged_Files *files);
 
 WINDOW_DEF bool window_compile_shader(GLuint *shader, GLenum shader_type, const char *shader_source);
 WINDOW_DEF bool window_link_program(GLuint *program, GLuint vertex_shader, GLuint fragment_shader);
@@ -124,8 +141,8 @@ static Window_Renderer_Vec4f BLACK = {0, 0, 0, 1};
 #ifdef __STB_INCLUDE_STB_TRUETYPE_H__
 #  define push_font window_renderer_push_font
 #  define draw_text (cstr, pos, factor) window_renderer_text(&(window_renderer), (cstr), strlen((cstr)), (pos), (factor), (WHITE))
-#  define draw_text_colored(cstr, pos, factor, color) window_renderer_text(&(window_renderer), (cstr), strlen((cstr)), (pos), (factor), (color))
-#  define draw_text_len(cstr, cstr_len, pos, factor) window_renderer_text(&(window_renderer), (cstr), (cstr_len), (pos), (factor), (WHITE))
+#  define draw_text_colored(cstr, pos, factor, color) window_renderer_text((cstr), strlen((cstr)), (pos), (factor), (color))
+#  define draw_text_len(cstr, cstr_len, pos, factor) window_renderer_text((cstr), (cstr_len), (pos), (factor), (WHITE))
 #  define draw_text_len_colored(cstr, cstr_len, pos, factor, color) window_renderer_text(&(window_renderer), (cstr), (cstr_len), (pos), (factor), (color))
 #endif //__STB_INCLUDE_STB_TRUETYPE_H__
 
@@ -254,7 +271,7 @@ LRESULT CALLBACK Window_Implementation_WndProc(HWND hWnd, UINT message, WPARAM w
 
 WINDOW_DEF void window_win32_opengl_init();
 
-WINDOW_DEF bool window_init(Window *w, int width, int height, const char *title) {
+WINDOW_DEF bool window_init(Window *w, int width, int height, const char *title, int flags) {
 
   STARTUPINFO startupInfo;
   GetStartupInfo(&startupInfo);
@@ -270,6 +287,11 @@ WINDOW_DEF bool window_init(Window *w, int width, int height, const char *title)
   wc.cbWndExtra = sizeof(LONG_PTR);
   wc.cbClsExtra = 0;
   wc.hCursor = LoadCursor(NULL, IDC_ARROW);
+  
+  HICON icon = LoadIcon(hInstance, MAKEINTRESOURCE(1));
+  wc.hIcon = icon; // ICON when tabbing
+  wc.hIconSm = icon; //ICON default
+  
   if(!RegisterClassEx(&wc)) {
     return false;
   }
@@ -280,12 +302,20 @@ WINDOW_DEF bool window_init(Window *w, int width, int height, const char *title)
   // WS_THICKFRAME :: resizable
   // WS_MAXIMIZEBOX :: maximizable
 
-  DWORD style = (WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_THICKFRAME | WS_MAXIMIZEBOX);
+  DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
+  if(!(flags & WINDOW_NOT_RESIZABLE)) {
+    style |= WS_THICKFRAME | WS_MAXIMIZEBOX;
+  }
 
   //add space for taskbar
   height += 39;
 
-  w->hwnd = CreateWindowEx(0,
+  DWORD window_flags = 0;
+  if((flags & WINDOW_DRAG_N_DROP)) {
+    window_flags |= WS_EX_ACCEPTFILES;
+  }
+
+  w->hwnd = CreateWindowEx(window_flags,
 			   wc.lpszClassName,
 			   wc.lpszClassName,
 			   style,
@@ -374,6 +404,10 @@ WINDOW_DEF bool window_peek(Window *w, Window_Event *e) {
     e->type = WINDOW_EVENT_NONE;
 
     switch(msg->message) {
+    case WM_DROPFILES: {
+      e->type = WINDOW_EVENT_FILEDROP;
+      e->as.value = msg->wParam;
+    } break;
     case WM_RBUTTONUP:  {
       e->type = WINDOW_EVENT_MOUSERELEASE;
       e->as.key = 'R';
@@ -449,6 +483,31 @@ WINDOW_DEF void window_swap_buffers(Window *w) {
 WINDOW_DEF void window_free(Window *w) {	
   ReleaseDC(w->hwnd, w->dc);
   DestroyWindow(w->hwnd);
+}
+
+WINDOW_DEF bool window_dragged_files_init(Window_Dragged_Files *files, Window_Event *event) {
+  files->h_drop = (HDROP) event->as.value;
+  files->count = DragQueryFile(files->h_drop, 0xffffffff, files->path, MAX_PATH);
+  if(files->count <= 0) {
+    return false;
+  }
+  files->index = 0;
+
+  return true;
+}
+
+WINDOW_DEF bool window_dragged_files_next(Window_Dragged_Files *files, char **path) {
+  if(files->index >= files->count) {
+    return false;
+  }
+  DragQueryFile(files->h_drop, files->index++, files->path, MAX_PATH);
+  *path = files->path;
+
+  return true;
+}
+
+WINDOW_DEF void window_dragged_files_free(Window_Dragged_Files *files) {
+  DragFinish(files->h_drop);
 }
 
 WINDOW_DEF const char *window_shader_type_name(GLenum shader) {
@@ -872,6 +931,7 @@ WINDOW_DEF void window_renderer_free(Window_Renderer *r) {
 
 WINDOW_DEF bool window_renderer_push_font(const char *filepath, float pixel_height) {
 
+
   FILE *f = fopen(filepath, "rb");
   if(!f) {
     WINDOW_LOG("ERROR: Can not open file: %s\n", filepath);
@@ -917,6 +977,8 @@ WINDOW_DEF bool window_renderer_push_font(const char *filepath, float pixel_heig
 
   unsigned char *temp_bitmap = malloc(WINDOW_RENDERER_STB_TEMP_BITMAP_SIZE *
 				      WINDOW_RENDERER_STB_TEMP_BITMAP_SIZE);
+  
+  Window_Renderer *r = &window_renderer;
   stbtt_BakeFontBitmap(buffer,0, pixel_height,
 		       temp_bitmap,
 		       WINDOW_RENDERER_STB_TEMP_BITMAP_SIZE,
@@ -926,7 +988,6 @@ WINDOW_DEF bool window_renderer_push_font(const char *filepath, float pixel_heig
   unsigned int tex;
   bool result = push_texture(1024, 1024, temp_bitmap, true, &tex);
 
-  Window_Renderer *r = &window_renderer;
   r->font_index = (int) tex;
 
   free(buffer);
@@ -936,6 +997,8 @@ WINDOW_DEF bool window_renderer_push_font(const char *filepath, float pixel_heig
 }
 
 WINDOW_DEF void window_renderer_text(const char *cstr, size_t cstr_len, Window_Renderer_Vec2f pos, float factor, Window_Renderer_Vec4f color) {
+
+  Window_Renderer *r = &window_renderer;
 
   float x = pos.x;
   float y = pos.y;

@@ -79,7 +79,7 @@ void push_triangle(Vec2f p1, Vec2f p2, Vec2f p3,
 int main() {
 
     Window window;
-    if(!window_init(&window, 800, 800, "Window")) {
+    if(!window_init(&window, 800, 800, "Window", 0)) {
 	return 1;
     }
 

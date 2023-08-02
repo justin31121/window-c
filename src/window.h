@@ -153,6 +153,9 @@ static Window_Renderer_Vec4f BLACK = {0, 0, 0, 1};
 #  define draw_text_colored(cstr, pos, factor, color) window_renderer_text((cstr), strlen((cstr)), (pos), (factor), (color))
 #  define draw_text_len(cstr, cstr_len, pos, factor) window_renderer_text((cstr), (cstr_len), (pos), (factor), (WHITE))
 #  define draw_text_len_colored(cstr, cstr_len, pos, factor, color) window_renderer_text(&(window_renderer), (cstr), (cstr_len), (pos), (factor), (color))
+
+#  define measure_text(cstr, factor, size) window_renderer_measure_text((cstr), strlen((cstr)), (factor), (size));
+#  define measure_text_len(cstr, cstr_len, factor, size) window_renderer_measure_text((cstr), (cstr_len), (factor), (size));
 #endif //__STB_INCLUDE_STB_TRUETYPE_H__
 
 WINDOW_DEF bool window_renderer_init(Window_Renderer *r);
@@ -172,6 +175,7 @@ WINDOW_DEF void window_renderer_free();
 
 #ifdef __STB_INCLUDE_STB_TRUETYPE_H__
 WINDOW_DEF bool window_renderer_push_font(const char *filepath, float pixel_height);
+WINDOW_DEF void window_renderer_measure_text(const char *cstr, size_t cstr_len, float scale, Vec2f *size);
 WINDOW_DEF void window_renderer_text(const char *cstr, size_t cstr_len, Window_Renderer_Vec2f pos, float scale, Window_Renderer_Vec4f color);
 #endif //__STB_INCLUDE_STB_TRUETYPE_H__
 
@@ -1073,8 +1077,8 @@ WINDOW_DEF void window_renderer_text(const char *cstr, size_t cstr_len, Window_R
 
     Window_Renderer *r = &window_renderer;
 
-    float x = pos.x;
-    float y = pos.y;
+    float x = 0;
+    float y = 0;
     color.w *= -1;
     
     for(size_t i=0;i<cstr_len;i++) {
@@ -1091,10 +1095,10 @@ WINDOW_DEF void window_renderer_text(const char *cstr, size_t cstr_len, Window_R
 			   WINDOW_RENDERER_STB_TEMP_BITMAP_SIZE, c-32, &x, &y, &q,1);
 	//1=opengl & d3d10+,0=d3d9
 
-	Window_Renderer_Vec2f p = vec2f(q.x0 * factor, _y + factor * (y - q.y1) );
+	Window_Renderer_Vec2f p = vec2f(pos.x + q.x0 * factor,pos.y + y + _y + factor * (y - q.y1) );
 	Window_Renderer_Vec2f s = vec2f((q.x1 - q.x0) * factor, (q.y1 - q.y0) * factor);
 	Window_Renderer_Vec2f uvp = vec2f(q.s0, 1 - q.t1);
-	Window_Renderer_Vec2f uvs = vec2f(q.s1 - q.s0, q.t1 - q.t0);
+	Window_Renderer_Vec2f uvs = vec2f(q.s1 - q.s0, q.t1 - q.t0);	
 
 	
 	window_renderer_quad(
@@ -1109,6 +1113,37 @@ WINDOW_DEF void window_renderer_text(const char *cstr, size_t cstr_len, Window_R
 	    window_renderer_vec2f(uvp.x + uvs.x, uvp.y + uvs.y));       
     }
 
+}
+
+WINDOW_DEF void window_renderer_measure_text(const char *cstr, size_t cstr_len, float factor, Vec2f *size) {
+    Window_Renderer *r = &window_renderer;
+
+    size->y = 0;
+    size->x = 0;
+
+    float x = 0;
+    float y = 0;
+    
+    for(size_t i=0;i<cstr_len;i++) {
+	unsigned char c = cstr[i];
+	if (c < 32 && c >= 128) {
+	    continue;
+	}
+
+	float _y = y;
+
+	stbtt_aligned_quad q;
+	stbtt_GetBakedQuad(r->font_cdata,
+			   WINDOW_RENDERER_STB_TEMP_BITMAP_SIZE,
+			   WINDOW_RENDERER_STB_TEMP_BITMAP_SIZE,
+			   c-32, &x, &y, &q, 1);
+
+	size->x = q.y1 - q.y0;
+	float height = q.x1 - q.x0;
+	if(height > size->y) size->y = height;
+    }
+    size->x = x * factor;
+    size->y *= factor;
 }
 
 #endif //__STB_INCLUDE_STB_TRUETYPE_H__

@@ -14,10 +14,10 @@
 int main() {
   
   Window window;
-  if(!window_init(&window, 400, 400, "Renderer", 0)) {
+  if(!window_init(&window, 700, 400, "Renderer", 0)) {
     return 1;
   }
-  
+
   unsigned int tex;
   if(!push_texture(logo_width, logo_height, logo_data, false, &tex)) {
       return 1;
@@ -68,16 +68,28 @@ int main() {
 
     draw_solid_rect( vec2f(0, 0), vec2f(100, 100), vec4f(0, 0, 1, 1) );
 
-    draw_texture( tex,
-		  vec2f(100, 100),
-		  vec2f(100, 100),
-		  vec2f(0, 0),
-		  vec2f(1, 1) );
+    draw_texture_colored( tex,
+			  vec2f(100, 100),
+			  vec2f(100, 100),
+			  vec2f(0, 0),
+			  vec2f(1, 1),
+			  vec4f(1, 1, 1, .5));
 
-    draw_text_colored( "Text is only possible with stb_truetype.h",
-		       vec2f(0, heightf/2), .5f, vec4f(1, 1, 1, .9) );
-    draw_text_colored( "Press k to toggle fullscreen!",
-		       vec2f(0, 2), .5f, vec4f(1, 1, 1, .9) );
+    Vec2f size;
+    float factor = .5f;
+    
+    const char *text = "Text is only possible with stb_truetype.h";
+    measure_text(text, factor, &size);
+    draw_text_colored(text,
+		      vec2f(widthf/2 - size.x/2,
+			    heightf/2 - size.y/2),
+		      factor, vec4f(1, 1, 1, .9) );
+
+    text = "Press k to toggle fullscreen!";
+    measure_text(text, factor, &size);
+    draw_text_colored( text,
+		       vec2f(widthf/2 - size.x/2, heightf/2 - size.y/2 - 4 * size.y),
+		       factor, vec4f(1, 1, 1, .9) );
 
     char buf[256];
     snprintf(buf, sizeof(buf), "%d x %d", window.width, window.height);

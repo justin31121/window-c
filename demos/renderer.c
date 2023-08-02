@@ -23,7 +23,7 @@ int main() {
       return 1;
   }
 
-  if(!push_font("C:\\Windows\\Fonts\\LeelawUI.ttf", 64.0)) {
+  if(!push_font("C:\\Windows\\Fonts\\arial.ttf", 64.0)) {
       return 1;
   }
 
@@ -74,12 +74,17 @@ int main() {
 		  vec2f(0, 0),
 		  vec2f(1, 1) );
 
-    draw_text_colored( "Text is only possible with stb_truetype.h!",
-		       vec2f(0, heightf/2), .8f, vec4f(1, 1, 1, .9) );
+    draw_text_colored( "Text is only possible with stb_truetype.h",
+		       vec2f(0, heightf/2), .5f, vec4f(1, 1, 1, .9) );
+    draw_text_colored( "Press k to toggle fullscreen!",
+		       vec2f(0, 2), .5f, vec4f(1, 1, 1, .9) );
 
     char buf[256];
     snprintf(buf, sizeof(buf), "%d x %d", window.width, window.height);
-    draw_text(buf, vec2f(0, heightf - 64.0f * .8f), .8f );
+    draw_text(buf, vec2f(0, heightf - 64.0f * .5f), .5f );
+
+    snprintf(buf, sizeof(buf), "%.2f ms", window.dt);
+    draw_text(buf, vec2f(0, heightf - 64.0f * .5f * 2), .5f );
 
     draw_solid_circle(vec2f((float) mouse_x, (float) mouse_y),
 		      10.0f,

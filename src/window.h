@@ -70,7 +70,6 @@ typedef struct{
 WINDOW_DEF bool window_init(Window *w, int width, int height, const char *title, int flags);
 WINDOW_DEF bool window_set_vsync(Window *w, bool use_vsync);
 WINDOW_DEF bool window_peek(Window *w, Window_Event *event);
-WINDOW_DEF bool window_get_window_size(Window *w, int *width, int *height);
 WINDOW_DEF bool window_get_mouse_position(Window *w, int *width, int *height);
 WINDOW_DEF void window_swap_buffers(Window *w);
 WINDOW_DEF bool window_toggle_fullscreen(Window *w);
@@ -402,8 +401,9 @@ WINDOW_DEF bool window_init(Window *w, int width, int height, const char *title,
     }
 
     QueryPerformanceFrequency(&w->performance_frequency);
+    QueryPerformanceCounter(&w->time);
     w->dt = 0;
-
+    
     return true;
 }
 
@@ -488,10 +488,10 @@ WINDOW_DEF bool window_peek(Window *w, Window_Event *e) {
     //dt
     LARGE_INTEGER time;
     QueryPerformanceCounter(&time);
-
     w->dt = ((double) time.QuadPart - (double) w->time.QuadPart)
 	* 1000
 	/ (double) w->performance_frequency.QuadPart;
+    w->time = time;
 
 
     return false;
@@ -507,9 +507,7 @@ WINDOW_DEF bool window_get_mouse_position(Window *w, int *width, int *height) {
     return false;
 }
   
-WINDOW_DEF void window_swap_buffers(Window *w) {
-    
-    QueryPerformanceCounter(&w->time);
+WINDOW_DEF void window_swap_buffers(Window *w) {   
     SwapBuffers(w->dc);
 }
 

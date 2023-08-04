@@ -123,6 +123,8 @@ typedef struct{
     int font_index;    
     int tex_index;
 
+    float width, height;
+
     Window_Renderer_Vertex verticies[WINDOW_RENDERER_CAP];
     int verticies_count;
 }Window_Renderer;
@@ -769,19 +771,23 @@ WINDOW_DEF void window_renderer_begin(int width, int height) {
 
     Window_Renderer *r = &window_renderer;
 
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glEnable(GL_BLEND);
+    if(width > 0 && height > 0) {
+
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	glEnable(GL_BLEND);
     
-    glViewport(0, 0, width, height);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glClearColor(0, 0, 0, 1);
+	glViewport(0, 0, width, height);
+	glClear(GL_COLOR_BUFFER_BIT);
+	glClearColor(0, 0, 0, 1);
 
-    float widthf = (float) width;
-    float heightf = (float) height;
+	// tell vertex shader what is the resolution is
+	glUniform1fv(glGetUniformLocation(r->program, "resolution_x"), 1, &r->width);
+	glUniform1fv(glGetUniformLocation(r->program, "resolution_y"), 1, &r->height);
 
-    // tell vertex shader what is the resolution is
-    glUniform1fv(glGetUniformLocation(r->program, "resolution_x"), 1, &widthf);
-    glUniform1fv(glGetUniformLocation(r->program, "resolution_y"), 1, &heightf);
+	r->width = (float) width;
+	r->height = (float) height;
+    }
+
 
     if(r->font_index > 0) {
 	GLint uniformLocation1 = glGetUniformLocation(r->program, "font_tex");
@@ -794,25 +800,37 @@ WINDOW_DEF void window_renderer_begin(int width, int height) {
 WINDOW_DEF void window_renderer_vertex(Window_Renderer_Vec2f p, Window_Renderer_Vec4f c, Window_Renderer_Vec2f uv) {
 
     Window_Renderer *r = &window_renderer;
-  
+
     if(r->verticies_count < WINDOW_RENDERER_CAP) {
 	Window_Renderer_Vertex *last = &r->verticies[r->verticies_count];
 	last->position = p;
 	last->color = c;
 	last->uv = uv;
-	r->verticies_count++;    	
-    } else {
-	// maybe flush ?
-    }
+	r->verticies_count++;	
+    } 
 }
 
 WINDOW_DEF void window_renderer_triangle(Window_Renderer_Vec2f p1, Window_Renderer_Vec2f p2, Window_Renderer_Vec2f p3, Window_Renderer_Vec4f c1, Window_Renderer_Vec4f c2, Window_Renderer_Vec4f c3, Window_Renderer_Vec2f uv1, Window_Renderer_Vec2f uv2, Window_Renderer_Vec2f uv3) {
+
+    Window_Renderer *r = &window_renderer;
+
+    if(r->verticies_count + 3 >= WINDOW_RENDERER_CAP) {
+	window_renderer_end();
+    }
+    
     window_renderer_vertex(p1, c1, uv1);
     window_renderer_vertex(p2, c2, uv2);
-    window_renderer_vertex(p3, c3, uv3);    
+    window_renderer_vertex(p3, c3, uv3);	
 }
 
 WINDOW_DEF void window_renderer_solid_triangle(Window_Renderer_Vec2f p1, Window_Renderer_Vec2f p2, Window_Renderer_Vec2f p3, Window_Renderer_Vec4f c) {
+
+    Window_Renderer *r = &window_renderer;
+
+    if(r->verticies_count + 3 >= WINDOW_RENDERER_CAP) {
+	window_renderer_end();
+    }
+	
     Window_Renderer_Vec2f uv = window_renderer_vec2f(-1, -1);
     window_renderer_vertex(p1, c, uv);
     window_renderer_vertex(p2, c, uv);
@@ -827,8 +845,8 @@ WINDOW_DEF void window_renderer_quad(Window_Renderer_Vec2f p1, Window_Renderer_V
 WINDOW_DEF void window_renderer_solid_rect(Window_Renderer_Vec2f pos, Window_Renderer_Vec2f size, Window_Renderer_Vec4f color) {
     Vec2f uv = vec2f(-1, -1);
     window_renderer_quad(pos,
-			 window_renderer_vec2f(pos.x + size.y, pos.y),
-			 window_renderer_vec2f(pos.x, pos.y+size.y),
+			 window_renderer_vec2f(pos.x + size.x, pos.y),
+			 window_renderer_vec2f(pos.x, pos.y + size.y),
 			 window_renderer_vec2f(pos.x + size.x, pos.y + size.y),
 			 color, color, color, color, uv, uv, uv, uv);
 }

@@ -74,6 +74,7 @@ WINDOW_DEF bool window_get_mouse_position(Window *w, int *width, int *height);
 WINDOW_DEF void window_swap_buffers(Window *w);
 WINDOW_DEF bool window_toggle_fullscreen(Window *w);
 WINDOW_DEF void window_free(Window *w);
+WIDNOW_DEF void window_show_cursor(Window *w, bool show);
 
 WINDOW_DEF bool window_dragged_files_init(Window_Dragged_Files *files, Window_Event *event);
 WINDOW_DEF bool window_dragged_files_next(Window_Dragged_Files *files, char **path);
@@ -560,6 +561,11 @@ WINDOW_DEF bool window_toggle_fullscreen(Window *w) {
 WINDOW_DEF void window_free(Window *w) {	
     ReleaseDC(w->hwnd, w->dc);
     DestroyWindow(w->hwnd);
+}
+
+WIDNOW_DEF void window_show_cursor(Window *w, bool show) {
+  (void) w;
+  ShowCursor(show);
 }
 
 WINDOW_DEF bool window_dragged_files_init(Window_Dragged_Files *files, Window_Event *event) {

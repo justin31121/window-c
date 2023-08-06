@@ -22,6 +22,10 @@
 #  define WINDOW_DEF static inline
 #endif //WINDOW_DEF
 
+#ifndef PI
+#  define PI 3.141592653589793f
+#endif //PI
+
 #define WINDOW_DOUBLE_CLICK_TIME_MS 500
 
 #define WINDOW_ESCAPE 27
@@ -130,6 +134,7 @@ typedef struct{
   int tex_index;
 
   float width, height;
+  Window_Renderer_Vec4f background;
 
   Window_Renderer_Vertex verticies[WINDOW_RENDERER_CAP];
   int verticies_count;
@@ -148,6 +153,8 @@ static Window_Renderer_Vec4f BLACK = {0, 0, 0, 1};
 #define draw_triangle window_renderer_triangle
 #define draw_solid_triangle window_renderer_solid_triangle
 #define draw_solid_rect window_renderer_solid_rect
+#define draw_solid_rounded_rect window_renderer_solid_rounded_rect
+#define draw_solid_rounded_shaded_rect window_renderer_solid_rounded_shaded_rect
 #define draw_solid_rect_angle window_renderer_solid_rect_angle
 #define push_texture window_renderer_push_texture
 #define draw_texture window_renderer_texture
@@ -167,16 +174,19 @@ static Window_Renderer_Vec4f BLACK = {0, 0, 0, 1};
 
 WINDOW_DEF bool window_renderer_init(Window_Renderer *r);
 WINDOW_DEF void window_renderer_begin(int width, int height);
+WINDOW_DEF void window_renderer_set_color(Window_Renderer_Vec4f color);
 WINDOW_DEF void window_renderer_vertex(Window_Renderer_Vec2f p, Window_Renderer_Vec4f c, Window_Renderer_Vec2f uv);
 WINDOW_DEF void window_renderer_triangle(Window_Renderer_Vec2f p1, Window_Renderer_Vec2f p2, Window_Renderer_Vec2f p3, Window_Renderer_Vec4f c1, Window_Renderer_Vec4f c2, Window_Renderer_Vec4f c3, Window_Renderer_Vec2f uv1, Window_Renderer_Vec2f uv2, Window_Renderer_Vec2f uv3);
 WINDOW_DEF void window_renderer_solid_triangle(Window_Renderer_Vec2f p1, Window_Renderer_Vec2f p2, Window_Renderer_Vec2f p3, Window_Renderer_Vec4f c);
 WINDOW_DEF void window_renderer_quad(Window_Renderer_Vec2f p1, Window_Renderer_Vec2f p2, Window_Renderer_Vec2f p3, Window_Renderer_Vec2f p4,Window_Renderer_Vec4f c1,Window_Renderer_Vec4f c2,Window_Renderer_Vec4f c3,Window_Renderer_Vec4f c4, Window_Renderer_Vec2f uv1, Window_Renderer_Vec2f uv2, Window_Renderer_Vec2f uv3, Window_Renderer_Vec2f uv4);
 WINDOW_DEF void window_renderer_solid_rect(Window_Renderer_Vec2f pos, Window_Renderer_Vec2f size,Window_Renderer_Vec4f color);
+WINDOW_DEF void window_renderer_solid_rounded_rect(Vec2f pos, Vec2f size, float radius, int parts, Vec4f color);
+WINDOW_DEF void window_renderer_solid_rounded_shaded_rect(Window_Renderer_Vec2f pos, Window_Renderer_Vec2f size, float radius, int parts, float shade_px, Window_Renderer_Vec4f color);
 WINDOW_DEF void window_renderer_solid_rect_angle(Window_Renderer_Vec2f pos, Window_Renderer_Vec2f size, float angle, Window_Renderer_Vec4f color);
 WINDOW_DEF bool window_renderer_push_texture(int width, int height, const void *data, bool grey, unsigned int *index);
 WINDOW_DEF void window_renderer_texture(unsigned int texture, Window_Renderer_Vec2f p, Window_Renderer_Vec2f s, Window_Renderer_Vec2f uvp, Window_Renderer_Vec2f uvs);
 WINDOW_DEF void window_renderer_texture_colored(unsigned int texture, Window_Renderer_Vec2f p, Window_Renderer_Vec2f s, Window_Renderer_Vec2f uvp, Window_Renderer_Vec2f uvs, Window_Renderer_Vec4f c);
-WINDOW_DEF void window_renderer_solid_circle(Window_Renderer_Vec2f pos, float radius, int parts, Window_Renderer_Vec4f color);
+WINDOW_DEF void window_renderer_solid_circle(Window_Renderer_Vec2f pos, float start_angle, float end_angle, float radius, int parts, Window_Renderer_Vec4f color);
 WINDOW_DEF void window_renderer_end();
 WINDOW_DEF void window_renderer_free();
 
@@ -803,7 +813,8 @@ WINDOW_DEF void window_renderer_begin(int width, int height) {
     
     glViewport(0, 0, width, height);
     glClear(GL_COLOR_BUFFER_BIT);
-    glClearColor(0, 0, 0, 1);
+    Window_Renderer_Vec4f *c = &r->background;
+    glClearColor(c->x, c->y, c->z, c->w);
 
     // tell vertex shader what is the resolution is
     glUniform1fv(glGetUniformLocation(r->program, "resolution_x"), 1, &r->width);
@@ -820,6 +831,11 @@ WINDOW_DEF void window_renderer_begin(int width, int height) {
   }
 
   r->tex_index = -1;
+}
+
+WINDOW_DEF void window_renderer_set_color(Window_Renderer_Vec4f color) {
+  Window_Renderer *r = &window_renderer;
+  r->background = color;
 }
 
 WINDOW_DEF void window_renderer_vertex(Window_Renderer_Vec2f p, Window_Renderer_Vec4f c, Window_Renderer_Vec2f uv) {
@@ -876,7 +892,64 @@ WINDOW_DEF void window_renderer_solid_rect(Window_Renderer_Vec2f pos, Window_Ren
 		       color, color, color, color, uv, uv, uv, uv);
 }
 
-WINDOW_DEF void window_renderer_solid_rect_angle(Window_Renderer_Vec2f pos, Window_Renderer_Vec2f size, float angle, Window_Renderer_Vec4f color) {
+WINDOW_DEF void window_renderer_solid_rounded_rect(Vec2f pos, Vec2f size, float radius, int parts, Vec4f color) {
+  if(size.y < 4 * radius) radius = size.y / 4; 
+
+  window_renderer_solid_rect(vec2f(pos.x, pos.y + radius),
+		  vec2f(size.x, size.y - 2 * radius),
+		  color);
+
+  window_renderer_solid_rect(vec2f(pos.x + radius, pos.y),
+		  vec2f(size.x - 2 * radius, size.y),
+		  color);
+
+  pos = vec2f(pos.x + radius, pos.y + radius);
+  size = vec2f(size.x - 2 * radius, size.y - 2 * radius);
+
+  //bottom left
+  window_renderer_solid_circle(pos,
+		    PI, PI * 3 / 2,
+		    radius,
+		    parts,
+		    color);
+
+  //bottom right
+  window_renderer_solid_circle(vec2f(pos.x + size.x, pos.y),
+		    PI * 3 / 2, 2 * PI,
+		    radius,
+		    parts,
+		    color);
+
+  //top left
+  window_renderer_solid_circle(vec2f(pos.x, pos.y + size.y),
+		    PI / 2, PI,
+		    radius,
+		    parts,
+		    color);
+
+  //top right
+  window_renderer_solid_circle(vec2f(pos.x + size.x, pos.y + size.y),
+		    0, PI /2,
+		    radius,
+		    parts,
+		    color);  
+}
+
+WINDOW_DEF void window_renderer_solid_rounded_shaded_rect(Window_Renderer_Vec2f pos,
+							  Window_Renderer_Vec2f size,
+							  float radius,
+							  int parts,
+							  float shade_px,
+							  Window_Renderer_Vec4f color) {
+  window_renderer_solid_rounded_rect(vec2f(pos.x - shade_px, pos.y - shade_px),
+				     vec2f(size.x + 2 *shade_px, size.y + 2 *shade_px),
+				     radius, parts, vec4f(0, 0, 0, color.w * .5));
+  window_renderer_solid_rounded_rect(pos, size, radius, parts, color);
+}
+
+WINDOW_DEF void window_renderer_solid_rect_angle(Window_Renderer_Vec2f pos, Window_Renderer_Vec2f size,
+						 float angle,
+						 Window_Renderer_Vec4f color) {
   Vec2f uv = vec2f(-1, -1);
 
   float s = sinf(angle);
@@ -899,22 +972,22 @@ WINDOW_DEF void window_renderer_solid_rect_angle(Window_Renderer_Vec2f pos, Wind
 			   color, color, color, uv, uv, uv);
 }
 
-WINDOW_DEF void window_renderer_texture(unsigned int texture, Window_Renderer_Vec2f p, Window_Renderer_Vec2f s, Window_Renderer_Vec2f uvp, Window_Renderer_Vec2f uvs)
-{
+WINDOW_DEF void window_renderer_texture(unsigned int texture,
+					Window_Renderer_Vec2f p, Window_Renderer_Vec2f s,
+					Window_Renderer_Vec2f uvp, Window_Renderer_Vec2f uvs) {
 
   Window_Renderer *r = &window_renderer;
 
-  if(r->tex_index == -1) {
-    r->tex_index = (int) texture;
-    GLint uniformLocation1 = glGetUniformLocation(r->program, "tex");
-    glUniform1i(uniformLocation1, r->tex_index);
-  } else {
-    //maybe flush ?
+  if(r->tex_index != -1) {
+    window_renderer_end();
   }
+
+  r->tex_index = (int) texture;
+  GLint uniformLocation1 = glGetUniformLocation(r->program, "tex");
+  glUniform1i(uniformLocation1, r->tex_index);
     
   Vec4f c = vec4f(1, 1, 1, 1);
-  window_renderer_quad(
-		       p,
+  window_renderer_quad(p,
 		       window_renderer_vec2f(p.x + s.x, p.y),
 		       window_renderer_vec2f(p.x, p.y + s.y),
 		       window_renderer_vec2f(p.x + s.x, p.y + s.y),
@@ -925,17 +998,19 @@ WINDOW_DEF void window_renderer_texture(unsigned int texture, Window_Renderer_Ve
 		       window_renderer_vec2f(uvp.x + uvs.x, uvp.y + uvs.y));
 }
 
-WINDOW_DEF void window_renderer_texture_colored(unsigned int texture, Window_Renderer_Vec2f p, Window_Renderer_Vec2f s, Window_Renderer_Vec2f uvp, Window_Renderer_Vec2f uvs, Window_Renderer_Vec4f c)
-{
+WINDOW_DEF void window_renderer_texture_colored(unsigned int texture,
+						Window_Renderer_Vec2f p, Window_Renderer_Vec2f s,
+					        Window_Renderer_Vec2f uvp, Window_Renderer_Vec2f uvs,
+						Window_Renderer_Vec4f c) {
   Window_Renderer *r = &window_renderer;
   
-  if(r->tex_index == -1) {
-    r->tex_index = (int) texture;
-    GLint uniformLocation1 = glGetUniformLocation(r->program, "tex");
-    glUniform1i(uniformLocation1, r->tex_index);
-  } else {
-    //maybe flush ? 
-      }
+  if(r->tex_index != -1) {
+    window_renderer_end();
+  }
+
+  r->tex_index = (int) texture;
+  GLint uniformLocation1 = glGetUniformLocation(r->program, "tex");
+  glUniform1i(uniformLocation1, r->tex_index);
   
   window_renderer_quad(
 		       p,
@@ -950,21 +1025,31 @@ WINDOW_DEF void window_renderer_texture_colored(unsigned int texture, Window_Ren
 }
 
 
-WINDOW_DEF void window_renderer_solid_circle(Window_Renderer_Vec2f pos, float radius, int parts, Window_Renderer_Vec4f color) {
+WINDOW_DEF void window_renderer_solid_circle(Window_Renderer_Vec2f pos,
+					     float start_angle, float end_angle,
+					     float radius,
+					     int parts,
+					     Window_Renderer_Vec4f color) {
+  float P = end_angle - start_angle;
+  float A = start_angle;
 
-#define PI 3.141592653589793f
+  Window_Renderer_Vec2f old = {radius * cosf(A),
+			       radius * sinf(A)};
 
-  Window_Renderer_Vec2f old = {radius, 0};
+  float t = 0.0f;
+  float dt = 1.f / (float) parts;
+
   for(int j=1;j<=parts;j++) {
-    Window_Renderer_Vec2f new =
-      {radius * cosf(2 * PI * ((float) j ) / ((float) parts)),
-       radius * sinf(2 * PI * ((float) j ) / ((float) parts))};
+    t += dt;
+    Window_Renderer_Vec2f new = {radius * cosf(A + P * t),
+				 radius * sinf(A + P * t)};
     window_renderer_solid_triangle(pos,
 				   window_renderer_vec2f(pos.x + new.x, pos.y + new.y),
 				   window_renderer_vec2f(pos.x + old.x, pos.y + old.y),
-				   color );
+				   color);
     old = new;
   }
+
   
 }
 

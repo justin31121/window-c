@@ -1,3 +1,7 @@
+
+#define STB_TRUETYPE_IMPLEMENTATION
+#include "../thirdparty/stb_truetype.h"
+
 #define WINDOW_IMPLEMENTATION
 #define WINDOW_VERBOSE // log errors
 #include "../src/window.h"
@@ -9,9 +13,26 @@ int main() {
     return 1;
   }
 
+#define BLINK_MS 500
+
+#define FONT_SIZE 64
+
+  if(!push_font("c:\\windows\\fonts\\arial.ttf", FONT_SIZE)) {
+    return 1;
+  }
+
 #define TINT 0.09411764705882353
 
   window_renderer_set_color(vec4f(TINT, TINT, TINT, 1));
+
+  char buf[1024];
+  int buf_size = 0;
+
+  float DT = 1000.0f / 60.0f;
+
+  bool cursor_visible = true;
+  float t_cursor = BLINK_MS;
+  float t_acc = 0.0f;
   
   Window_Event event;
   while(window.running) {
@@ -19,16 +40,35 @@ int main() {
       switch(event.type) {
       case WINDOW_EVENT_KEYPRESS: {
 	switch(event.as.key) {
-	case 'Q': {
+	case WINDOW_ESCAPE: {
 	  window.running = false;
 	} break;
+	case WINDOW_BACKSPACE: {
+	  buf_size--;
+	  if(buf_size < 0) buf_size = 0;
+	  cursor_visible = true;
+	  t_cursor = BLINK_MS;
+	} break;
 	default: {
-		  
+	  if( isprint(event.as.key) ) {
+	    //printf("%c %d\n", event.as.key, event.as.key); fflush(stdout);
+	    buf[buf_size++] = event.as.key;
+	    if(buf_size >= sizeof(buf)) buf_size = sizeof(buf) - 1;
+	    cursor_visible = true;
+	    t_cursor = BLINK_MS;
+	  }	  
 	} break;
 	}
       } break;
-      default: {
-	      
+      case WINDOW_EVENT_KEYRELEASE: {
+	switch(event.as.key) {
+	case WINDOW_BACKSPACE: {
+	} break;
+	default: {
+	} break;
+	}
+      } break;
+      default: {	      
       } break;
       }
     }
@@ -37,24 +77,45 @@ int main() {
     int height = window.height;
             
     window_renderer_begin(width, height);
-      
-    float r = 40;
-    int parts = 40;
-    Vec4f c = vec4f(0, 0, 1, 1);
 
-    int w = 400;
-    int h = 400;
+    //TEXT
+    Vec2f size;
+    float f = .5f;
+
+    const char *text = "The Application";
+    measure_text(text, f, &size);
+    draw_text(text, vec2f(width/2 - size.x/2, height - 3 * f * FONT_SIZE), f);
+
+    //TEXTFIELD
+    float padding = f * FONT_SIZE / 4;
+    float w = width * 2 / 3 + 2 * padding;
+    float h = f * FONT_SIZE + 2 * padding;
+
+    Vec2f pos = vec2f(width/2 - w/2, height - 7 * f * FONT_SIZE);
+    Vec2f text_pos = vec2f(pos.x + padding, pos.y + 2 * padding);
+
+    draw_solid_rounded_rect(pos,
+			    vec2f(w, h),
+			    20,
+			    20,
+			    vec4f(1, 1, 1, 1));    
+
+    measure_text_len(buf, buf_size, f, &size);
+    draw_text_len_colored(buf, buf_size, text_pos, f, vec4f(0, 0, 0, 1));
+
+    if(cursor_visible) {
+      draw_solid_rect(vec2f(text_pos.x + size.x, pos.y + padding),
+		      vec2f(4, FONT_SIZE * f), vec4f(0, 0, 0, 1));          
+    }
     
-    draw_solid_rounded_shaded_rect(vec2f(width/2 - w/2, height/2 - h/2),
-				   vec2f(w, h),
-				   (float) r,
-				   parts,
-				   5,
-				   c);
-
-
     window_renderer_end(width, height);
     window_swap_buffers(&window);
+
+    t_cursor -= DT;
+    if(t_cursor < 0.0f) {
+      t_cursor = BLINK_MS;
+      cursor_visible = !cursor_visible;
+    }
   }
 
   window_free(&window);

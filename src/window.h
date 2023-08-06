@@ -28,6 +28,7 @@
 
 #define WINDOW_DOUBLE_CLICK_TIME_MS 500
 
+#define WINDOW_BACKSPACE 8
 #define WINDOW_ESCAPE 27
 #define WINDOW_SPACE 32
 
@@ -64,7 +65,8 @@ typedef struct{
   POINT point;
   LARGE_INTEGER performance_frequency;
   LARGE_INTEGER time;
-
+  bool is_shift_down;
+  
   double dt;
   int running;
   int width, height;
@@ -166,7 +168,7 @@ static Window_Renderer_Vec4f BLACK = {0, 0, 0, 1};
 #  define draw_text(cstr, pos, factor) window_renderer_text((cstr), strlen((cstr)), (pos), (factor), (WHITE))
 #  define draw_text_colored(cstr, pos, factor, color) window_renderer_text((cstr), strlen((cstr)), (pos), (factor), (color))
 #  define draw_text_len(cstr, cstr_len, pos, factor) window_renderer_text((cstr), (cstr_len), (pos), (factor), (WHITE))
-#  define draw_text_len_colored(cstr, cstr_len, pos, factor, color) window_renderer_text(&(window_renderer), (cstr), (cstr_len), (pos), (factor), (color))
+#  define draw_text_len_colored(cstr, cstr_len, pos, factor, color) window_renderer_text((cstr), (cstr_len), (pos), (factor), (color))
 
 #  define measure_text(cstr, factor, size) window_renderer_measure_text((cstr), strlen((cstr)), (factor), (size));
 #  define measure_text_len(cstr, cstr_len, factor, size) window_renderer_measure_text((cstr), (cstr_len), (factor), (size));
@@ -395,6 +397,7 @@ WINDOW_DEF bool window_init(Window *w, int width, int height, const char *title,
   w->running = WINDOW_RUNNING;
   w->width = width;
   w->height = height;
+  w->is_shift_down = false;
 
   // load non-default-opengl-functions
   window_win32_opengl_init();
@@ -477,12 +480,28 @@ WINDOW_DEF bool window_peek(Window *w, Window_Event *e) {
       bool is_down = ((msg->lParam & (1 << 31)) == 0);
 
       if(was_down != is_down) {
-	e->as.key = (char) msg->wParam;
+
+	if(msg->wParam == VK_SHIFT) {
+	  if(was_down) {
+	    w->is_shift_down = false;
+	  } else {
+	    w->is_shift_down = true;
+	  }
+	  continue;
+	}
+	
+	char c = (char) msg->wParam;
+	if(!w->is_shift_down && 'A' <= c && c <= 'Z') {
+	  c += 32;
+	}	
+	e->as.key = c;
 	if(was_down) {
 	  e->type = WINDOW_EVENT_KEYRELEASE;
 	} else {
 	  e->type = WINDOW_EVENT_KEYPRESS;
 	}
+
+	
       }
       
     } break;

@@ -304,6 +304,8 @@ WINDOW_DEF bool window_init(Window *w, int width, int height, const char *title,
   HMODULE hInstance = GetModuleHandle(NULL);
   DWORD nCmdShow = startupInfo.wShowWindow;
 
+  SetProcessDPIAware();
+
   WNDCLASSEX wc = {0};
   wc.cbSize = sizeof(WNDCLASSEX);
   wc.style = CS_OWNDC | CS_HREDRAW | CS_VREDRAW;

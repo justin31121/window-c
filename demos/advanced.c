@@ -113,22 +113,21 @@ int main() {
 
     //TEXT
     Vec2f size;
-    float f = 1.f;
-    const char *text = "Titel";
-    measure_text(text, f, &size);
-    draw_text(text, vec2f(width/2 - size.x/2, height - 3 * f * FONT_SIZE), f);
+    float f = .8f;
 
     //TEXTFIELD
     float padding = f * FONT_SIZE / 4;
     float w = width * 2 / 3 + 2 * padding;
     float h = f * FONT_SIZE + 2 * padding;
 
-    Vec2f pos = vec2f(width/2 - w/2, height - 7 * f * FONT_SIZE);
+    Vec2f pos = vec2f(width/2 - w/2, height - 3 * f * FONT_SIZE);
     Vec2f text_pos = vec2f(pos.x + padding, pos.y + 2 * padding);
 
-    draw_solid_rect(pos,
-		    vec2f(w, h),
-		    vec4f(1, 1, 1, 1));    
+    draw_solid_rounded_rect(pos,
+			    vec2f(w, h),
+			    10.f,
+			    20,
+			    vec4f(1, 1, 1, 1));    
 
     measure_text_len(buf, buf_size, f, &size);
     draw_text_len_colored(buf, buf_size, text_pos, f, vec4f(0, 0, 0, 1));

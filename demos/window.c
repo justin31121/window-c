@@ -14,9 +14,9 @@ int main() {
   while(window.running) {
     while(window_peek(&window, &event)) {
       if(event.type == WINDOW_EVENT_KEYPRESS) {
-	if(event.as.key == 'Q') {
+	if(event.as.key == 'q') {
 	  window.running = false;	  
-	} else if(event.as.key == 'K') {	  
+	} else if(event.as.key == 'k') {	  
 	  window_toggle_fullscreen(&window);
 	}
       }

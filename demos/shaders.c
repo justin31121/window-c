@@ -129,7 +129,6 @@ int main() {
     glUseProgram(program);
 
     int width, height;
-    if(!window_get_window_size(&window, &width, &height)) return 1;
     int mouse_x = width;
     int mouse_y = height;
     bool dragging = false;
@@ -142,7 +141,8 @@ int main() {
 	    else if(event.type == WINDOW_EVENT_MOUSERELEASE) dragging = false;
 	}
 
-	if(!window_get_window_size(&window, &width, &height)) return 1;
+	width = window.width;
+        height = window.height;
 	if(dragging) {
 	    if(!window_get_mouse_position(&window, &mouse_x, &mouse_y)) return 1;
 	    if(mouse_x > width) mouse_x = width;

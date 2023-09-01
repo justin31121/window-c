@@ -304,7 +304,22 @@ WINDOW_DEF bool window_init(Window *w, int width, int height, const char *title,
   HMODULE hInstance = GetModuleHandle(NULL);
   DWORD nCmdShow = startupInfo.wShowWindow;
 
+#if 1
+  HINSTANCE user32Lib = LoadLibrary("user32.dll");
+  if(!user32Lib) {
+    return false;
+  }
+
+  PROC setProcessDPIAware = GetProcAddress(user32Lib, "SetProcessDPIAware");
+  if(!setProcessDPIAware) {
+    return false;
+  }
+  setProcessDPIAware();
+
+  FreeLibrary(user32Lib);
+#else
   SetProcessDPIAware();
+#endif
 
   WNDCLASSEX wc = {0};
   wc.cbSize = sizeof(WNDCLASSEX);
@@ -342,7 +357,7 @@ WINDOW_DEF bool window_init(Window *w, int width, int height, const char *title,
   }
 
   //add space  
-      width += 16;
+  width += 16;
   height += 39;
 
   DWORD window_flags = 0;

@@ -508,10 +508,6 @@ WINDOW_DEF bool window_peek(Window *w, Window_Event *e) {
 	}
 
 
-	static char[][2] german_keyboard = {
-	    
-	};
-	
 	char c = (char) msg->wParam;
 	if(!w->is_shift_down && 'A' <= c && c <= 'Z') {
 	  c += 32;

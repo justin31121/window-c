@@ -5,12 +5,14 @@
 //   msvc : user32.lib gdi32.lib opengl32.lib (shell32.lib)
 //   mingw:
 
-#ifdef WINDOW_VERBOSE
-#  include <stdio.h>
-#  define WINDOW_LOG(...) fprintf(stderr, __VA_ARGS__);
-#else
-#  define WINDOW_LOG(...)
-#endif //WINDOW_VERBOSE
+#ifndef WINDOW_LOG
+#  ifndef WINDOW_QUIET
+#    include <stdio.h>
+#    define WINDOW_LOG(...) fprintf(stderr, "WINDOW: "__VA_ARGS__);
+#  else
+#    define WINDOW_LOG(...)
+#  endif // WINDOW QUIET
+#endif // WINDOW_LOG
 
 #include <stdbool.h>
 #include <math.h>
@@ -128,9 +130,9 @@ typedef struct{
   GLuint textures;
   unsigned int images_count;
 
-#ifdef __STB_INCLUDE_STB_TRUETYPE_H__
+#ifdef WINDOW_STB_TRUETYPE
   stbtt_bakedchar font_cdata[96]; // ASCII 32..126 is 95 glyphs
-#endif //__STB_INCLUDE_STB_TRUETYPE_H__
+#endif //WINDOW_STB_TRUETYPE
     
   int font_index;    
   int tex_index;
@@ -148,10 +150,10 @@ static Window_Renderer_Vec4f BLUE  = {0, 0, 1, 1};
 static Window_Renderer_Vec4f GREEN = {0, 1, 0, 1};
 static Window_Renderer_Vec4f BLACK = {0, 0, 0, 1};
 
-#define Vec2f Window_Renderer_Vec2f
 #define vec2f(x, y) window_renderer_vec2f((x), (y))
-#define Vec4f Window_Renderer_Vec4f
 #define vec4f(x, y, z, w) window_renderer_vec4f((x), (y), (z), (w))
+#define Vec4f Window_Renderer_Vec4f
+#define Vec2f Window_Renderer_Vec2f
 #define draw_triangle window_renderer_triangle
 #define draw_solid_triangle window_renderer_solid_triangle
 #define draw_solid_rect window_renderer_solid_rect
@@ -163,7 +165,7 @@ static Window_Renderer_Vec4f BLACK = {0, 0, 0, 1};
 #define draw_texture_colored window_renderer_texture_colored
 #define draw_solid_circle window_renderer_solid_circle
 
-#ifdef __STB_INCLUDE_STB_TRUETYPE_H__
+#ifdef WINDOW_STB_TRUETYPE
 #  define push_font window_renderer_push_font
 #  define draw_text(cstr, pos, factor) window_renderer_text((cstr), strlen((cstr)), (pos), (factor), (WHITE))
 #  define draw_text_colored(cstr, pos, factor, color) window_renderer_text((cstr), strlen((cstr)), (pos), (factor), (color))
@@ -172,7 +174,11 @@ static Window_Renderer_Vec4f BLACK = {0, 0, 0, 1};
 
 #  define measure_text(cstr, factor, size) window_renderer_measure_text((cstr), strlen((cstr)), (factor), (size));
 #  define measure_text_len(cstr, cstr_len, factor, size) window_renderer_measure_text((cstr), (cstr_len), (factor), (size));
-#endif //__STB_INCLUDE_STB_TRUETYPE_H__
+#endif //WINDOW_STB_TRUETYPE
+
+#ifdef WINDOW_STB_IMAGE
+#  define push_image window_renderer_push_image
+#endif //WINDOW_STB_IMAGE
 
 WINDOW_DEF bool window_renderer_init(Window_Renderer *r);
 WINDOW_DEF void window_renderer_begin(int width, int height);
@@ -192,11 +198,15 @@ WINDOW_DEF void window_renderer_solid_circle(Window_Renderer_Vec2f pos, float st
 WINDOW_DEF void window_renderer_end();
 WINDOW_DEF void window_renderer_free();
 
-#ifdef __STB_INCLUDE_STB_TRUETYPE_H__
+#ifdef WINDOW_STB_TRUETYPE
 WINDOW_DEF bool window_renderer_push_font(const char *filepath, float pixel_height);
 WINDOW_DEF void window_renderer_measure_text(const char *cstr, size_t cstr_len, float scale, Vec2f *size);
 WINDOW_DEF void window_renderer_text(const char *cstr, size_t cstr_len, Window_Renderer_Vec2f pos, float scale, Window_Renderer_Vec4f color);
-#endif //__STB_INCLUDE_STB_TRUETYPE_H__
+#endif //WINDOW_STB_TRUETYPE
+
+#ifdef WINDOW_STB_IMAGE
+WINDOW_DEF bool window_renderer_push_image(const char *filepath, int *width, int *height, unsigned int *index);
+#endif //WINDOW_STB_IMAGE
 
 #endif //WINDOW_NO_RENDERER
 
@@ -450,6 +460,19 @@ WINDOW_DEF bool window_set_vsync(Window *w, bool use_vsync) {
   return wglSwapIntervalEXT(use_vsync ? 1 : 0);
 }
 
+static char window_german_keyboard[10] = {
+  [1] ='!',
+  [2] = '\"',
+  [3] = '§',
+  [4] = '$',
+  [5] = '%',
+  [6] = '&',
+  [7] = '/',
+  [8] = '(',
+  [9] = ')', 
+  [0] = '=',
+};
+
 WINDOW_DEF bool window_peek(Window *w, Window_Event *e) {
     
   MSG *msg = &e->msg;
@@ -506,12 +529,18 @@ WINDOW_DEF bool window_peek(Window *w, Window_Event *e) {
 	  }
 	  continue;
 	}
-
-
+	
 	char c = (char) msg->wParam;
-	if(!w->is_shift_down && 'A' <= c && c <= 'Z') {
-	  c += 32;
-	}	
+	if(w->is_shift_down) {
+	  if('0' <= c && c <= '9') {
+	    c = window_german_keyboard[c - '0'];
+	  }
+	} else {
+	  if('A' <= c && c <= 'Z') {
+	    c += 32;
+	  }
+	}
+	
 	e->as.key = c;
 	if(was_down) {
 	  e->type = WINDOW_EVENT_KEYRELEASE;
@@ -548,6 +577,10 @@ WINDOW_DEF bool window_peek(Window *w, Window_Event *e) {
     / (double) w->performance_frequency.QuadPart;
   w->time = time;
 
+  //window_renderer
+#ifndef WINDOW_NO_RENDERER
+  window_renderer_begin(w->width, w->height);
+#endif // WINDOW_NO_RENDERER
 
   return false;
 }
@@ -562,7 +595,11 @@ WINDOW_DEF bool window_get_mouse_position(Window *w, int *width, int *height) {
   return false;
 }
   
-WINDOW_DEF void window_swap_buffers(Window *w) {   
+WINDOW_DEF void window_swap_buffers(Window *w) {
+#ifndef WINDOW_NO_RENDERER
+  window_renderer_end();
+#endif // WINDOW_NO_RENDERER
+  
   SwapBuffers(w->dc);
 }
 
@@ -682,7 +719,7 @@ WINDOW_DEF bool window_compile_shader(GLuint *shader, GLenum shader_type, const 
     GLchar message[1024];
     GLsizei message_size = 0;
     glGetShaderInfoLog(*shader, sizeof(message), &message_size, message);
-    WINDOW_LOG("ERROR: could not compile %s\n", window_shader_type_name(shader_type));
+    WINDOW_LOG("Could not compile shader: %s\n", window_shader_type_name(shader_type));
     WINDOW_LOG("%.*s\n", message_size, message);
     return false;
   }
@@ -704,7 +741,7 @@ WINDOW_DEF bool window_link_program(GLuint *program, GLuint vertex_shader, GLuin
     GLchar message[1024];
 
     glGetProgramInfoLog(*program, sizeof(message), &message_size, message);
-    WINDOW_LOG("ERROR: Program Linking: %.*s\n", message_size, message);
+    WINDOW_LOG("Could not link program: %.*s\n", message_size, message);
     return false;
   }
   
@@ -1164,7 +1201,7 @@ WINDOW_DEF void window_renderer_free(Window_Renderer *r) {
   (void) r;
 }
 
-#ifdef __STB_INCLUDE_STB_TRUETYPE_H__
+#ifdef WINDOW_STB_TRUETYPE
 #include <stdio.h>
 
 #define WINDOW_RENDERER_STB_TEMP_BITMAP_SIZE 1024
@@ -1174,32 +1211,32 @@ WINDOW_DEF bool window_renderer_push_font(const char *filepath, float pixel_heig
 
   FILE *f = fopen(filepath, "rb");
   if(!f) {
-    WINDOW_LOG("ERROR: Can not open file: %s\n", filepath);
+    WINDOW_LOG("Can not open file: %s\n", filepath);
     return false;
   }
 
   if(fseek(f, 0, SEEK_END) < 0) {
-    WINDOW_LOG("ERROR: Can not seek in file: %s\n", filepath);
+    WINDOW_LOG("Can not seek in file: %s\n", filepath);
     fclose(f);
     return false;
   }
 
   long m = ftell(f);
   if(m < 0) {
-    WINDOW_LOG("ERROR: Can not read file(ftell): %s\n", filepath);
+    WINDOW_LOG("Can not read file(ftell): %s\n", filepath);
     fclose(f);
     return false;
   }  
 
   if(fseek(f, 0, SEEK_SET) < 0) {
-    WINDOW_LOG("ERROR: Can not seek in file: %s\n", filepath);
+    WINDOW_LOG("Can not seek in file: %s\n", filepath);
     fclose(f);
     return false;
   }
 
   unsigned char *buffer = (unsigned char *) malloc((size_t) m);
   if(!buffer) {
-    WINDOW_LOG("ERROR: Can not allocate enough memory\n");
+    WINDOW_LOG("Can not allocate enough memory\n");
     fclose(f);
     return false;
   }
@@ -1207,7 +1244,7 @@ WINDOW_DEF bool window_renderer_push_font(const char *filepath, float pixel_heig
   size_t _m = (size_t) m;
   size_t n = fread(buffer, 1, _m, f);
   if(n != _m) {
-    WINDOW_LOG("ERROR: Failed to read file(fread): %s\n", filepath);
+    WINDOW_LOG("Failed to read file(fread): %s\n", filepath);
     free(buffer);
     fclose(f);
     return false;
@@ -1309,7 +1346,24 @@ WINDOW_DEF void window_renderer_measure_text(const char *cstr, size_t cstr_len, 
   size->y *= factor;
 }
 
-#endif //__STB_INCLUDE_STB_TRUETYPE_H__
+#endif //WINDOW_STB_TRUETYPE
+
+#ifdef WINDOW_STB_IMAGE
+
+WINDOW_DEF bool window_renderer_push_image(const char *filepath, int *width, int *height, unsigned int *index) {
+
+  unsigned char *image_data  = stbi_load(filepath, width, height, NULL, 4);
+  if(image_data == NULL)  {
+    return false;
+  }
+
+  bool result = window_renderer_push_texture(*width, *height, image_data, false, index);
+  stbi_image_free(image_data);
+
+  return result;
+}
+
+#endif // WINDOW_STB_IMAGE
 
 #endif //WINDOW_NO_RENDERER
 

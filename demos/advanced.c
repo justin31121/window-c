@@ -3,6 +3,7 @@
 #include "../thirdparty/stb_truetype.h"
 
 #define WINDOW_IMPLEMENTATION
+#define WINDOW_STB_TRUETYPE
 #define WINDOW_VERBOSE // log errors
 #include "../src/window.h"
 
@@ -59,16 +60,16 @@ int main() {
 		default: {
 		    if( isprint(event.as.key) ) {
 
-			cursor_visible = true;
-			t_cursor = BLINK_MS;
-			t_cursor_total = BLINK_DURATION_MS;
+		      cursor_visible = true;
+		      t_cursor = BLINK_MS;
+		      t_cursor_total = BLINK_DURATION_MS;
 	    
-			//printf("%c %d\n", event.as.key, event.as.key); fflush(stdout);
-			buf[buf_size++] = event.as.key;
-			if(buf_size >= sizeof(buf)) buf_size = sizeof(buf) - 1;
-			cursor_visible = true;
-			t_cursor = BLINK_MS;
-		    }	  
+		      buf[buf_size++] = event.as.key;
+		      if(buf_size >= sizeof(buf)) buf_size = sizeof(buf) - 1;
+		      cursor_visible = true;
+		      t_cursor = BLINK_MS;		
+		    }
+		    printf("%c %d\n", event.as.key, event.as.key); fflush(stdout);
 		} break;
 		}
 	    } break;

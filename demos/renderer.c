@@ -2,14 +2,17 @@
 #define STB_TRUETYPE_IMPLEMENTATION 
 #include "../thirdparty/stb_truetype.h"
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "../thirdparty/stb_image.h"
+
 #define WINDOW_IMPLEMENTATION
-#define WINDOW_VERBOSE // log errors
+#define WINDOW_STB_IMAGE
+#define WINDOW_STB_TRUETYPE
 #include "../src/window.h"
 
 #include <stdint.h>
 
-//https://de.freepik.com/vektoren-kostenlos/vogel-bunter-logo-gradientenvektor_28267842.htm#query=logo&position=2&from_view=keyword&track=sph
-#include "../rsc/logo.h"
+// Logo.jpg (https://de.freepik.com/vektoren-kostenlos/vogel-bunter-logo-gradientenvektor_28267842.htm#query=logo&position=2&from_view=keyword&track=sph)
 
 int main() {
   
@@ -19,9 +22,17 @@ int main() {
   }
 
   unsigned int tex;
+  int logo_width, logo_height;
+  if(!push_image("rsc\\logo.jpg", &logo_width, &logo_height, &tex)) {
+    return 1;
+  }
+
+  /*
+  #include "../rsc/logo.h"
   if(!push_texture(logo_width, logo_height, logo_data, false, &tex)) {
       return 1;
   }
+  */
 
   if(!push_font("C:\\Windows\\Fonts\\arial.ttf", 64.0)) {
       return 1;
@@ -35,29 +46,24 @@ int main() {
   while(window.running) {
     while(window_peek(&window, &event)) {
       if(event.type == WINDOW_EVENT_KEYPRESS) {
-	if(event.as.key == 'Q') {
+	if(event.as.key == 'q') {
 	  window.running = false;	  
-	} else if(event.as.key == 'K') {
+	} else if(event.as.key == 'k') {
 	  window_toggle_fullscreen(&window);
 	}
       }
     }
-    int width = window.width;
-    int height = window.height;
-
     float widthf  = (float) window.width;
     float heightf = (float) window.height;
 
     if(window_get_mouse_position(&window, &mouse_x, &mouse_y)) {
-      if(mouse_x > width) mouse_x = width;
+      if(mouse_x > widthf) mouse_x = widthf;
       if(mouse_x < 0) mouse_x = 0;
-      if(mouse_y > height) mouse_y = height;
+      if(mouse_y > heightf) mouse_y = heightf;
       if(mouse_y < 0) mouse_y = 0;
-      mouse_y = height - mouse_y;
+      mouse_y = heightf - mouse_y;
     }
     
-    window_renderer_begin(width, height);
-
     Vec2f uv = vec2f(-1, -1);
     draw_triangle(vec2f(0, 0), vec2f(widthf, 0), vec2f(widthf, heightf),
 		  RED, GREEN, BLUE,
@@ -99,13 +105,14 @@ int main() {
     draw_text(buf, vec2f(0, heightf - 64.0f * .5f * 2), .5f );
 
     draw_solid_circle(vec2f((float) mouse_x, (float) mouse_y),
+		      0,
+		      2 * PI,
 		      10.0f,
 		      20,
 		      vec4f(1, 0, 0, 1) );
 
-    draw_solid_rect_angle( vec2f(width/2 - 50, height/2 - 50), vec2f(100, 100), time * 6 / 4 * PI / 1000 , vec4f(1, 0, 0, .4) );
-	
-    window_renderer_end();
+    draw_solid_rect_angle( vec2f(widthf/2 - 50, heightf/2 - 50), vec2f(100, 100), time * 6 / 4 * PI / 1000 , vec4f(1, 0, 0, .4) );
+	    
     window_swap_buffers(&window);
 
     time += 16;

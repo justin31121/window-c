@@ -2,15 +2,19 @@
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "../thirdparty/stb_truetype.h"
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "../thirdparty/stb_image.h"
+
 #define WINDOW_IMPLEMENTATION
 #define WINDOW_STB_TRUETYPE
+#define WINDOW_STB_IMAGE
 #define WINDOW_VERBOSE // log errors
 #include "../src/window.h"
 
 int main() {
   
     Window window;
-    if(!window_init(&window, 400, 400, "Advanced", 0)) {
+    if(!window_init(&window, 600, 600, "Advanced", 0)) {
 	return 1;
     }
 
@@ -19,12 +23,18 @@ int main() {
 
 #define BACKSPACE_DT_MS 50
 
-#define FONT_SIZE 32
+#define FONT_SIZE 64
 
     if(!push_font("c:\\windows\\fonts\\segoeui.ttf", FONT_SIZE)) {
 	return 1;
     }
 
+    unsigned int tex;
+    int image_width, image_height;
+    if(!push_image("rsc\\logo.jpg", &image_width, &image_height, &tex)) {
+      return 1;
+    }
+    
 #define TINT 0.09411764705882353
 
     window_renderer_set_color(vec4f(TINT, TINT, TINT, 1));
@@ -40,7 +50,9 @@ int main() {
     bool cursor_visible = true;
     float t_cursor = BLINK_MS;
     float t_cursor_total = BLINK_DURATION_MS;
-  
+
+    float out;
+    float in  = .2f;
     Window_Event event;
     while(window.running) {
 	while(window_peek(&window, &event)) {
@@ -112,12 +124,10 @@ int main() {
 
 	int width = window.width;
 	int height = window.height;
-            
-	window_renderer_begin(width, height);
 
 	//TEXT
 	Vec2f size;
-	float f = 1.f;
+	float f = .5f;
 
 	//TEXTFIELD
 	float padding = f * FONT_SIZE / 4;
@@ -127,11 +137,9 @@ int main() {
 	Vec2f pos = vec2f(width/2 - w/2, height - 3 * f * FONT_SIZE);
 	Vec2f text_pos = vec2f(pos.x + padding, pos.y + 2 * padding);
 
-	draw_solid_rounded_rect(pos,
-				vec2f(w, h),
-				10.f,
-				20,
-				vec4f(1, 1, 1, 1));    
+	draw_solid_rect(pos,
+		       vec2f(w, h),
+		       vec4f(1, 1, 1, 1));    
 
 	measure_text_len(buf, buf_size, f, &size);
 	draw_text_len_colored(buf, buf_size, text_pos, f, vec4f(0, 0, 0, 1));
@@ -140,8 +148,51 @@ int main() {
 	    draw_solid_rect(vec2f(text_pos.x + size.x, pos.y + padding),
 			    vec2f(2, FONT_SIZE * f), vec4f(0, 0, 0, 1));          
 	}
-    
-	window_renderer_end(width, height);
+
+	//BUTTONs
+	if(button(vec2f(0, 0), vec2f(100, 100),
+		  vec4f(1, 0, 0, 1))) {
+	  memcpy(buf, "Foo", 3);
+	  buf_size = 3;
+	}
+	if(texture_button(tex, vec2f(100, 0),
+			  vec2f(100, 100))) {
+	  memcpy(buf, "Bar", 3);
+	  buf_size = 3;
+	}
+	if(texture_button_ex(tex,
+			     vec2f(200, 0), vec2f(100, 100),
+			     vec4f(1, 1, 0, 1),
+			     vec2f(.25, .25), vec2f(.5, .5))) {
+	  memcpy(buf, "Bazz", 4);
+	  buf_size = 4;
+	}
+	
+        const char *text = "Click Me!";
+	if(window_renderer_text_button(text, strlen(text), f, WHITE,
+				       vec2f(0, 100), vec2f(120, 100), BLUE)) {
+	  buf_size = 0;
+	  in = .2f;
+	}
+
+	//SLIDER
+	float slider_width = window.width/2;
+	float slider_height = 8.f;
+	
+	if(window_renderer_slider(vec2f(window.width/2 - slider_width/2, window.height/2 - slider_height/2),
+				  vec2f(slider_width, slider_height),
+				  RED, WHITE, in, &out)) {
+	  in = out;
+	}
+
+	char buffer[65];
+	snprintf(buffer, sizeof(buffer), "%.2f", out);
+	measure_text(buffer, f, &size);
+	draw_text_colored(buffer,
+			  vec2f(window.width/2 - slider_width/2, window.height/2 - slider_height/2 + FONT_SIZE),
+			  f, WHITE);
+	
+	
 	window_swap_buffers(&window);
 
 	t_cursor -= DT;
@@ -149,7 +200,7 @@ int main() {
 	if(t_cursor < 0.0f) {
 	    if(t_cursor_total > 0.0f) {
 		t_cursor = BLINK_MS;
-		cursor_visible = !cursor_visible;	
+		cursor_visible = !cursor_visible;
 	    }
 	}
 	if(t_cursor_total < 0.0f) {

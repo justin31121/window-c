@@ -134,7 +134,7 @@ typedef struct{
   stbtt_bakedchar font_cdata[96]; // ASCII 32..126 is 95 glyphs
 #endif //WINDOW_STB_TRUETYPE
     
-  int font_index;    
+  int font_index;
   int tex_index;
 
   float width, height;
@@ -142,6 +142,12 @@ typedef struct{
 
   Window_Renderer_Vertex verticies[WINDOW_RENDERER_CAP];
   int verticies_count;
+
+  //Imgui things
+  Window_Renderer_Vec2f input;
+  Window_Renderer_Vec2f pos;
+  bool clicked;
+  bool released;
 }Window_Renderer;
 
 static Window_Renderer_Vec4f WHITE = {1, 1, 1, 1};
@@ -154,6 +160,7 @@ static Window_Renderer_Vec4f BLACK = {0, 0, 0, 1};
 #define vec4f(x, y, z, w) window_renderer_vec4f((x), (y), (z), (w))
 #define Vec4f Window_Renderer_Vec4f
 #define Vec2f Window_Renderer_Vec2f
+
 #define draw_triangle window_renderer_triangle
 #define draw_solid_triangle window_renderer_solid_triangle
 #define draw_solid_rect window_renderer_solid_rect
@@ -164,6 +171,10 @@ static Window_Renderer_Vec4f BLACK = {0, 0, 0, 1};
 #define draw_texture window_renderer_texture
 #define draw_texture_colored window_renderer_texture_colored
 #define draw_solid_circle window_renderer_solid_circle
+
+#define button window_renderer_button
+#define texture_button window_renderer_texture_button
+#define texture_button_ex window_renderer_texture_button_ex
 
 #ifdef WINDOW_STB_TRUETYPE
 #  define push_font window_renderer_push_font
@@ -181,8 +192,18 @@ static Window_Renderer_Vec4f BLACK = {0, 0, 0, 1};
 #endif //WINDOW_STB_IMAGE
 
 WINDOW_DEF bool window_renderer_init(Window_Renderer *r);
+WINDOW_DEF void window_renderer_free();
+
 WINDOW_DEF void window_renderer_begin(int width, int height);
 WINDOW_DEF void window_renderer_set_color(Window_Renderer_Vec4f color);
+WINDOW_DEF void window_renderer_end();
+
+WINDOW_DEF void window_renderer_imgui_begin(Window *w, Window_Event *e);
+WINDOW_DEF void window_renderer_imgui_update(Window *w, Window_Event *e);
+WINDOW_DEF void window_renderer_imgui_end();
+
+// Primitives
+
 WINDOW_DEF void window_renderer_vertex(Window_Renderer_Vec2f p, Window_Renderer_Vec4f c, Window_Renderer_Vec2f uv);
 WINDOW_DEF void window_renderer_triangle(Window_Renderer_Vec2f p1, Window_Renderer_Vec2f p2, Window_Renderer_Vec2f p3, Window_Renderer_Vec4f c1, Window_Renderer_Vec4f c2, Window_Renderer_Vec4f c3, Window_Renderer_Vec2f uv1, Window_Renderer_Vec2f uv2, Window_Renderer_Vec2f uv3);
 WINDOW_DEF void window_renderer_solid_triangle(Window_Renderer_Vec2f p1, Window_Renderer_Vec2f p2, Window_Renderer_Vec2f p3, Window_Renderer_Vec4f c);
@@ -195,13 +216,20 @@ WINDOW_DEF bool window_renderer_push_texture(int width, int height, const void *
 WINDOW_DEF void window_renderer_texture(unsigned int texture, Window_Renderer_Vec2f p, Window_Renderer_Vec2f s, Window_Renderer_Vec2f uvp, Window_Renderer_Vec2f uvs);
 WINDOW_DEF void window_renderer_texture_colored(unsigned int texture, Window_Renderer_Vec2f p, Window_Renderer_Vec2f s, Window_Renderer_Vec2f uvp, Window_Renderer_Vec2f uvs, Window_Renderer_Vec4f c);
 WINDOW_DEF void window_renderer_solid_circle(Window_Renderer_Vec2f pos, float start_angle, float end_angle, float radius, int parts, Window_Renderer_Vec4f color);
-WINDOW_DEF void window_renderer_end();
-WINDOW_DEF void window_renderer_free();
+
+//Imgui-things
+WINDOW_DEF bool window_renderer_button(Window_Renderer_Vec2f p, Window_Renderer_Vec2f s, Window_Renderer_Vec4f c);
+WINDOW_DEF bool window_renderer_texture_button(unsigned int texture, Window_Renderer_Vec2f p, Window_Renderer_Vec2f s);
+WINDOW_DEF bool window_renderer_texture_button_ex(unsigned int texture, Window_Renderer_Vec2f p, Window_Renderer_Vec2f s, Window_Renderer_Vec4f c, Window_Renderer_Vec2f uvp, Window_Renderer_Vec2f uvs);
+
+WINDOW_DEF bool window_renderer_slider(Window_Renderer_Vec2f p, Window_Renderer_Vec2f s, Window_Renderer_Vec4f knot_color, Window_Renderer_Vec4f color, float value, float *cursor);
 
 #ifdef WINDOW_STB_TRUETYPE
 WINDOW_DEF bool window_renderer_push_font(const char *filepath, float pixel_height);
 WINDOW_DEF void window_renderer_measure_text(const char *cstr, size_t cstr_len, float scale, Vec2f *size);
 WINDOW_DEF void window_renderer_text(const char *cstr, size_t cstr_len, Window_Renderer_Vec2f pos, float scale, Window_Renderer_Vec4f color);
+
+WINDOW_DEF bool window_renderer_text_button(const char *cstr, size_t cstr_len, float scale, Window_Renderer_Vec4f text_color, Window_Renderer_Vec2f p, Window_Renderer_Vec2f s, Window_Renderer_Vec4f c);
 #endif //WINDOW_STB_TRUETYPE
 
 #ifdef WINDOW_STB_IMAGE
@@ -547,7 +575,6 @@ WINDOW_DEF bool window_peek(Window *w, Window_Event *e) {
 	} else {
 	  e->type = WINDOW_EVENT_KEYPRESS;
 	}
-
 	
       }
       
@@ -555,6 +582,11 @@ WINDOW_DEF bool window_peek(Window *w, Window_Event *e) {
     default: {
     } break;
     }
+
+    
+#ifndef WINDOW_NO_RENDERER
+    window_renderer_imgui_update(w, e);
+#endif //WINDOW_NO_RENDERER
 
     if(e->type != WINDOW_EVENT_NONE) {
       return true;
@@ -579,6 +611,7 @@ WINDOW_DEF bool window_peek(Window *w, Window_Event *e) {
 
   //window_renderer
 #ifndef WINDOW_NO_RENDERER
+  window_renderer_imgui_begin(w, e);
   window_renderer_begin(w->width, w->height);
 #endif // WINDOW_NO_RENDERER
 
@@ -598,6 +631,7 @@ WINDOW_DEF bool window_get_mouse_position(Window *w, int *width, int *height) {
 WINDOW_DEF void window_swap_buffers(Window *w) {
 #ifndef WINDOW_NO_RENDERER
   window_renderer_end();
+  window_renderer_imgui_end();
 #endif // WINDOW_NO_RENDERER
   
   SwapBuffers(w->dc);
@@ -872,9 +906,17 @@ WINDOW_DEF bool window_renderer_init(Window_Renderer *r) {
   r->images_count = 0;
   r->verticies_count = 0;
   r->font_index = -1;
+
+  window_renderer_imgui_end();
+  window_renderer.input = vec2f(-1.f, -1.f);
   
   return true;
 }
+
+WINDOW_DEF void window_renderer_free(Window_Renderer *r) {
+  (void) r;
+}
+
 
 WINDOW_DEF void window_renderer_begin(int width, int height) {
 
@@ -904,7 +946,43 @@ WINDOW_DEF void window_renderer_begin(int width, int height) {
     glUniform1i(uniformLocation1, r->font_index);	
   }
 
-  r->tex_index = -1;
+  r->tex_index = -1;  
+}
+
+WINDOW_DEF void window_renderer_imgui_begin(Window *w, Window_Event *e) {
+
+  int x, y;
+  window_get_mouse_position(w, &x, &y);
+
+  window_renderer.pos = window_renderer_vec2f((float) x, ((float) w->height - (float) y));
+  if(window_renderer.clicked) {
+    window_renderer.input = window_renderer.pos;
+  }
+}
+
+WINDOW_DEF void window_renderer_imgui_update(Window *w, Window_Event *e) {
+  if(e->type == WINDOW_EVENT_MOUSEPRESS) {    
+    window_renderer.clicked = true;
+  } else if(e->type == WINDOW_EVENT_MOUSERELEASE) {
+    window_renderer.released = true;
+  }  
+}
+
+WINDOW_DEF void window_renderer_imgui_end(Window *w, Window_Event *e) {
+  if(window_renderer.released) {
+    window_renderer.input = vec2f(-1.f, -1.f);
+  }
+    
+  window_renderer.clicked = false;
+  window_renderer.released = false;
+}
+
+WINDOW_DEF void window_renderer_end() {
+  Window_Renderer *r = &window_renderer;
+  
+  glBufferSubData(GL_ARRAY_BUFFER, 0, r->verticies_count * sizeof(Window_Renderer_Vertex), r->verticies);
+  glDrawArrays(GL_TRIANGLES, 0, r->verticies_count);
+  r->verticies_count = 0;
 }
 
 WINDOW_DEF void window_renderer_set_color(Window_Renderer_Vec4f color) {
@@ -1006,7 +1084,77 @@ WINDOW_DEF void window_renderer_solid_rounded_rect(Vec2f pos, Vec2f size, float 
 		    0, PI /2,
 		    radius,
 		    parts,
-		    color);  
+		    color);
+}
+
+WINDOW_DEF bool window_renderer_button_impl(Window_Renderer_Vec2f p, Window_Renderer_Vec2f s, Window_Renderer_Vec4f *c) {
+  Window_Renderer_Vec2f pos = window_renderer.input;
+  bool holding =
+    p.x <= pos.x &&
+    (pos.x - p.x) <= s.x &&
+    p.y <= pos.y &&
+    (pos.y - p.y) <= s.y;
+  if(holding) {
+    c->w *= .5;
+  }
+  return holding;
+}
+
+WINDOW_DEF bool window_renderer_button(Window_Renderer_Vec2f p, Window_Renderer_Vec2f s, Window_Renderer_Vec4f c) {
+  bool holding = window_renderer_button_impl(p, s, &c);
+  window_renderer_solid_rect(p, s, c);
+  return window_renderer.released && holding;
+}
+
+WINDOW_DEF bool window_renderer_texture_button(unsigned int texture, Window_Renderer_Vec2f p, Window_Renderer_Vec2f s) {
+  Window_Renderer_Vec4f c = vec4f(1, 1, 1, 1);
+  bool holding = window_renderer_button_impl(p, s, &c);
+  window_renderer_texture_colored(texture, p, s, vec2f(0, 0), vec2f(1, 1), c);
+  return window_renderer.released && holding;
+}
+
+WINDOW_DEF bool window_renderer_texture_button_ex(unsigned int texture, Window_Renderer_Vec2f p, Window_Renderer_Vec2f s, Window_Renderer_Vec4f c, Window_Renderer_Vec2f uvp, Window_Renderer_Vec2f uvs) {
+  bool holding = window_renderer_button_impl(p, s, &c);
+  window_renderer_texture_colored(texture, p, s, uvp, uvs, c);
+  return window_renderer.released && holding;
+}
+
+WINDOW_DEF bool window_renderer_slider(Window_Renderer_Vec2f p, Window_Renderer_Vec2f s, Window_Renderer_Vec4f knot_color, Window_Renderer_Vec4f color, float value, float *cursor) {
+  
+  Window_Renderer_Vec2f cursor_pos = vec2f(p.x + s.x * value, p.y + s.y/2);
+  float cursor_radius = s.y * 1.125;
+  *cursor = value;
+
+  Window_Renderer_Vec2f input = window_renderer.input;
+  float dx = input.x - cursor_pos.x;
+  float dy = input.y - cursor_pos.y;
+  bool knot_clicked = ((dx * dx) + (dy *dy)) <= (cursor_radius * cursor_radius);
+
+  if(knot_clicked) {
+    cursor_pos.x = window_renderer.pos.x;
+    if((cursor_pos.x - p.x) < 0) cursor_pos.x = p.x;
+    if(s.x < (cursor_pos.x - p.x)) cursor_pos.x = p.x + s.x;
+    *cursor = (cursor_pos.x - p.x) / s.x;
+  }
+  
+  window_renderer_solid_rect(p, vec2f(cursor_pos.x - p.x, s.y), knot_color);
+  window_renderer_solid_rect(vec2f(cursor_pos.x, p.y), vec2f(s.x - cursor_pos.x + p.x, s.y), color);
+  window_renderer_solid_circle(cursor_pos, 0, 2 * PI, cursor_radius, 20, knot_color);
+
+  bool clicked =
+    p.x <= input.x &&
+    (input.x - p.x) <= s.x&&
+    p.y <= input.y &&
+    (input.y - p.y) <= s.y;    
+  if(window_renderer.released && knot_clicked) {    
+    return true;
+  }
+  if(window_renderer.clicked && clicked) {
+    *cursor = (window_renderer.input.x - p.x) / s.x;
+    return true;
+  }
+
+  return false;
 }
 
 WINDOW_DEF void window_renderer_solid_rounded_shaded_rect(Window_Renderer_Vec2f pos,
@@ -1188,19 +1336,6 @@ WINDOW_DEF bool window_renderer_push_texture(int width, int height, const void *
   return true;
 }
 
-WINDOW_DEF void window_renderer_end() {
-
-  Window_Renderer *r = &window_renderer;
-  
-  glBufferSubData(GL_ARRAY_BUFFER, 0, r->verticies_count * sizeof(Window_Renderer_Vertex), r->verticies);
-  glDrawArrays(GL_TRIANGLES, 0, r->verticies_count);
-  r->verticies_count = 0;
-}
-
-WINDOW_DEF void window_renderer_free(Window_Renderer *r) {
-  (void) r;
-}
-
 #ifdef WINDOW_STB_TRUETYPE
 #include <stdio.h>
 
@@ -1313,6 +1448,25 @@ WINDOW_DEF void window_renderer_text(const char *cstr, size_t cstr_len, Window_R
 			 window_renderer_vec2f(uvp.x + uvs.x, uvp.y + uvs.y));       
   }
 
+}
+
+WINDOW_DEF bool window_renderer_text_button(const char *cstr, size_t cstr_len, float scale, Window_Renderer_Vec4f text_color, Window_Renderer_Vec2f p, Window_Renderer_Vec2f s, Window_Renderer_Vec4f c) {
+  bool holding = window_renderer_button_impl(p, s, &c);
+  window_renderer_solid_rect(p, s, c);
+  if(holding) {
+    text_color.w *= .5;
+  }
+
+  Vec2f size;
+  window_renderer_measure_text(cstr, cstr_len, scale, &size);
+
+  if(size.x <= s.x && size.y <= s.y) {
+    Vec2f pos = vec2f(p.x + s.x / 2 - size.x / 2,
+		      p.y + s.y / 2 - size.y / 2);
+    window_renderer_text(cstr, cstr_len, pos, scale, text_color);
+  }
+  
+  return window_renderer.released && holding;
 }
 
 WINDOW_DEF void window_renderer_measure_text(const char *cstr, size_t cstr_len, float factor, Vec2f *size) {

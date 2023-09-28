@@ -951,6 +951,7 @@ WINDOW_DEF void window_renderer_begin(int width, int height) {
 
 WINDOW_DEF void window_renderer_imgui_begin(Window *w, Window_Event *e) {
 
+  (void) e;
   int x, y;
   window_get_mouse_position(w, &x, &y);
 
@@ -961,6 +962,7 @@ WINDOW_DEF void window_renderer_imgui_begin(Window *w, Window_Event *e) {
 }
 
 WINDOW_DEF void window_renderer_imgui_update(Window *w, Window_Event *e) {
+  (void) w;
   if(e->type == WINDOW_EVENT_MOUSEPRESS) {    
     window_renderer.clicked = true;
   } else if(e->type == WINDOW_EVENT_MOUSERELEASE) {
@@ -969,6 +971,8 @@ WINDOW_DEF void window_renderer_imgui_update(Window *w, Window_Event *e) {
 }
 
 WINDOW_DEF void window_renderer_imgui_end(Window *w, Window_Event *e) {
+  (void) w;
+  (void) e;
   if(window_renderer.released) {
     window_renderer.input = vec2f(-1.f, -1.f);
   }

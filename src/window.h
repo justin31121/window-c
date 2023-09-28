@@ -1488,8 +1488,6 @@ WINDOW_DEF void window_renderer_measure_text(const char *cstr, size_t cstr_len, 
       continue;
     }
 
-    float _y = y;
-
     stbtt_aligned_quad q;
     stbtt_GetBakedQuad(r->font_cdata,
 		       WINDOW_RENDERER_STB_TEMP_BITMAP_SIZE,

@@ -40,6 +40,7 @@ typedef enum{
   WINDOW_EVENT_KEYRELEASE,
   WINDOW_EVENT_MOUSEPRESS,
   WINDOW_EVENT_MOUSERELEASE,
+  WINDOW_EVENT_MOUSEWHEEL,
   WINDOW_EVENT_FILEDROP,
 }Window_Event_Type;
 
@@ -49,6 +50,7 @@ typedef struct{
   union{
     char key;
     long long value;
+    int amount;
   }as;
 }Window_Event;
 
@@ -74,11 +76,14 @@ typedef struct{
   int width, height;
 }Window;
 
+typedef struct{
+  HANDLE handle;
+}Window_Clipboard;
+
 #define WINDOW_RUNNING       0x1
 #define WINDOW_NOT_RESIZABLE 0x2
 #define WINDOW_DRAG_N_DROP   0x4
 #define WINDOW_FULLSCREEN    0x8
-
 
 WINDOW_DEF bool window_init(Window *w, int width, int height, const char *title, int flags);
 WINDOW_DEF bool window_set_vsync(Window *w, bool use_vsync);
@@ -92,6 +97,10 @@ WINDOW_DEF bool window_show_cursor(Window *w, bool show);
 WINDOW_DEF bool window_dragged_files_init(Window_Dragged_Files *files, Window_Event *event);
 WINDOW_DEF bool window_dragged_files_next(Window_Dragged_Files *files, char **path);
 WINDOW_DEF void window_dragged_files_free(Window_Dragged_Files *files);
+
+WINDOW_DEF bool window_clipboard_init(Window_Clipboard *clipboard, Window *w, char **text);
+WINDOW_DEF bool window_clipboard_set(Window *w, const char *text, size_t text_len);
+WINDOW_DEF void window_clipboard_free(Window_Clipboard *clipboard);
 
 WINDOW_DEF bool window_compile_shader(GLuint *shader, GLenum shader_type, const char *shader_source);
 WINDOW_DEF bool window_link_program(GLuint *program, GLuint vertex_shader, GLuint fragment_shader);
@@ -131,6 +140,7 @@ typedef struct{
   unsigned int images_count;
 
 #ifdef WINDOW_STB_TRUETYPE
+  float font_height;
   stbtt_bakedchar font_cdata[96]; // ASCII 32..126 is 95 glyphs
 #endif //WINDOW_STB_TRUETYPE
     
@@ -185,6 +195,8 @@ static Window_Renderer_Vec4f BLACK = {0, 0, 0, 1};
 
 #  define measure_text(cstr, factor, size) window_renderer_measure_text((cstr), strlen((cstr)), (factor), (size));
 #  define measure_text_len(cstr, cstr_len, factor, size) window_renderer_measure_text((cstr), (cstr_len), (factor), (size));
+
+#  define draw_text_wrapped window_renderer_text_wrapped
 #endif //WINDOW_STB_TRUETYPE
 
 #ifdef WINDOW_STB_IMAGE
@@ -228,6 +240,7 @@ WINDOW_DEF bool window_renderer_slider(Window_Renderer_Vec2f p, Window_Renderer_
 WINDOW_DEF bool window_renderer_push_font(const char *filepath, float pixel_height);
 WINDOW_DEF void window_renderer_measure_text(const char *cstr, size_t cstr_len, float scale, Vec2f *size);
 WINDOW_DEF void window_renderer_text(const char *cstr, size_t cstr_len, Window_Renderer_Vec2f pos, float scale, Window_Renderer_Vec4f color);
+WINDOW_DEF void window_renderer_text_wrapped(const char *cstr, size_t cstr_len, Window_Renderer_Vec2f *pos, Window_Renderer_Vec2f size, float scale, Window_Renderer_Vec4f color);
 
 WINDOW_DEF bool window_renderer_text_button(const char *cstr, size_t cstr_len, float scale, Window_Renderer_Vec4f text_color, Window_Renderer_Vec2f p, Window_Renderer_Vec2f s, Window_Renderer_Vec4f c);
 #endif //WINDOW_STB_TRUETYPE
@@ -579,6 +592,11 @@ WINDOW_DEF bool window_peek(Window *w, Window_Event *e) {
       }
       
     } break;
+    case WM_MOUSEWHEEL:
+    case WM_MOUSEHWHEEL: {
+      e->type = WINDOW_EVENT_MOUSEWHEEL; 
+      e->as.amount = GET_WHEEL_DELTA_WPARAM(msg->wParam) / 120;//apperantly this is 120`s steps
+    } break;
     default: {
     } break;
     }
@@ -728,6 +746,74 @@ WINDOW_DEF bool window_dragged_files_next(Window_Dragged_Files *files, char **pa
 
 WINDOW_DEF void window_dragged_files_free(Window_Dragged_Files *files) {
   DragFinish(files->h_drop);
+}
+
+WINDOW_DEF bool window_clipboard_init(Window_Clipboard *clipboard, Window *w, char **text) {
+
+  (void) w;
+  
+  if(!OpenClipboard(w->hwnd)) {
+    return false;
+  }
+  
+  clipboard->handle = GetClipboardData(CF_TEXT);
+  if(clipboard->handle == NULL) {
+    CloseClipboard();
+    return false;
+  }
+
+  *text = GlobalLock(clipboard->handle);
+  if((*text) == NULL) {
+    CloseClipboard();
+    return false;
+  }  
+  
+  return true;
+}
+
+WINDOW_DEF bool window_clipboard_set(Window *w, const char *text, size_t text_len) {
+
+  HGLOBAL mem = GlobalAlloc(GMEM_MOVEABLE, text_len + 1);
+  if(!mem) {
+    return false;
+  }
+
+  char *locked_mem = GlobalLock(mem);
+  if(!locked_mem) {
+    GlobalFree(mem);
+    return false;
+  }
+
+  memcpy(locked_mem, text, text_len);
+  locked_mem[text_len] = 0;
+  
+  GlobalUnlock(locked_mem);
+
+  if(!OpenClipboard(w->hwnd)) {
+    GlobalFree(mem);
+    return false;
+  }
+
+  if(!EmptyClipboard()) {
+    GlobalFree(mem);
+    CloseClipboard();
+    return false;
+  }
+
+  if(SetClipboardData(CF_TEXT, mem) == NULL) {
+    GlobalFree(mem);
+    CloseClipboard();
+    return false;
+  }
+
+  CloseClipboard();
+  
+  return true;		
+}
+
+WINDOW_DEF void window_clipboard_free(Window_Clipboard *clipboard) {
+  GlobalUnlock(clipboard->handle);
+  CloseClipboard();  
 }
 
 WINDOW_DEF const char *window_shader_type_name(GLenum shader) {
@@ -1126,7 +1212,7 @@ WINDOW_DEF bool window_renderer_texture_button_ex(unsigned int texture, Window_R
 WINDOW_DEF bool window_renderer_slider(Window_Renderer_Vec2f p, Window_Renderer_Vec2f s, Window_Renderer_Vec4f knot_color, Window_Renderer_Vec4f color, float value, float *cursor) {
   
   Window_Renderer_Vec2f cursor_pos = vec2f(p.x + s.x * value, p.y + s.y/2);
-  float cursor_radius = s.y * 1.125;
+  float cursor_radius = s.y * 1.125f;
   *cursor = value;
 
   Window_Renderer_Vec2f input = window_renderer.input;
@@ -1169,7 +1255,7 @@ WINDOW_DEF void window_renderer_solid_rounded_shaded_rect(Window_Renderer_Vec2f 
 							  Window_Renderer_Vec4f color) {
   window_renderer_solid_rounded_rect(vec2f(pos.x - shade_px, pos.y - shade_px),
 				     vec2f(size.x + 2 *shade_px, size.y + 2 *shade_px),
-				     radius, parts, vec4f(0, 0, 0, color.w * .5));
+				     radius, parts, vec4f(0, 0, 0, color.w * .5f));
   window_renderer_solid_rounded_rect(pos, size, radius, parts, color);
 }
 
@@ -1347,7 +1433,6 @@ WINDOW_DEF bool window_renderer_push_texture(int width, int height, const void *
 
 WINDOW_DEF bool window_renderer_push_font(const char *filepath, float pixel_height) {
 
-
   FILE *f = fopen(filepath, "rb");
   if(!f) {
     WINDOW_LOG("Can not open file: %s\n", filepath);
@@ -1405,6 +1490,7 @@ WINDOW_DEF bool window_renderer_push_font(const char *filepath, float pixel_heig
   bool result = push_texture(1024, 1024, temp_bitmap, true, &tex);
 
   r->font_index = (int) tex;
+  r->font_height = pixel_height;
 
   free(buffer);
   free(temp_bitmap);
@@ -1454,6 +1540,24 @@ WINDOW_DEF void window_renderer_text(const char *cstr, size_t cstr_len, Window_R
 
 }
 
+WINDOW_DEF void window_renderer_text_wrapped(const char *cstr, size_t cstr_len, Window_Renderer_Vec2f *pos, Window_Renderer_Vec2f size, float scale, Window_Renderer_Vec4f color) {
+  Window_Renderer *r = &window_renderer;
+  Vec2f text_size;
+  
+  size_t i = 0;
+  while(i < cstr_len) {
+    size_t j=1;
+    for(;j<cstr_len - i;j++) {
+      measure_text_len(cstr + i, j, scale, &text_size);
+      if(text_size.x >= size.x) break;
+    }
+
+    draw_text_len_colored(cstr + i, j, *pos, scale, color);
+    i += j;
+    pos->y -= r->font_height;    
+  }
+}
+
 WINDOW_DEF bool window_renderer_text_button(const char *cstr, size_t cstr_len, float scale, Window_Renderer_Vec4f text_color, Window_Renderer_Vec2f p, Window_Renderer_Vec2f s, Window_Renderer_Vec4f c) {
   bool holding = window_renderer_button_impl(p, s, &c);
   window_renderer_solid_rect(p, s, c);
@@ -1476,6 +1580,9 @@ WINDOW_DEF bool window_renderer_text_button(const char *cstr, size_t cstr_len, f
 WINDOW_DEF void window_renderer_measure_text(const char *cstr, size_t cstr_len, float factor, Vec2f *size) {
   Window_Renderer *r = &window_renderer;
 
+  float hi = 0;
+  float lo = 0;
+
   size->y = 0;
   size->x = 0;
 
@@ -1496,10 +1603,11 @@ WINDOW_DEF void window_renderer_measure_text(const char *cstr, size_t cstr_len, 
 
     size->x = q.y1 - q.y0;
     float height = q.x1 - q.x0;
-    if(height > size->y) size->y = height;
+    if(height > hi) hi = height;
+    if(height < lo) lo = height;
   }
-  size->x = x * factor;
-  size->y *= factor;
+  size->x = x * factor;  
+  size->y = (hi - lo) * factor;
 }
 
 #endif //WINDOW_STB_TRUETYPE

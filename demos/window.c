@@ -1,48 +1,48 @@
 #include <stdio.h>
 
-#define WINDOW_IMPLEMENTATION
-#include "../src/window.h"
+#define FRAME_IMPLEMENTATION
+#include "../src/frame.h"
 
 int main() {
 
-  Window window;
-  if(!window_init(&window, 400, 400, "Window", WINDOW_DRAG_N_DROP)) {
+  Frame frame;
+  if(!frame_init(&frame, 400, 400, "Frame", FRAME_DRAG_N_DROP)) {
     return 1;
   }
     
-  Window_Event event;
-  while(window.running) {
-    while(window_peek(&window, &event)) {
-      if(event.type == WINDOW_EVENT_KEYPRESS) {
+  Frame_Event event;
+  while(frame.running) {
+    while(frame_peek(&frame, &event)) {
+      if(event.type == FRAME_EVENT_KEYPRESS) {
 	if(event.as.key == 'q') {
-	  window.running = false;	  
+	  frame.running = false;	  
 	} else if(event.as.key == 'k') {	  
-	  window_toggle_fullscreen(&window);
+	  frame_toggle_fullscreen(&frame);
 	}
       }
-      else if(event.type == WINDOW_EVENT_FILEDROP) {
-	Window_Dragged_Files files;
-	if(window_dragged_files_init(&files, &event)) {
+      else if(event.type == FRAME_EVENT_FILEDROP) {
+	Frame_Dragged_Files files;
+	if(frame_dragged_files_init(&files, &event)) {
 
 	  char *path;
-	  while(window_dragged_files_next(&files, &path)) {
+	  while(frame_dragged_files_next(&files, &path)) {
 	    printf("%s\n", path);
 	  }
 	  fflush(stdout);
 		
-	  window_dragged_files_free(&files);
+	  frame_dragged_files_free(&files);
 	}
       }
     }
 
-    glViewport(0, 0, window.width, window.height);
+    glViewport(0, 0, frame.width, frame.height);
     glClear(GL_COLOR_BUFFER_BIT);
     glClearColor(1, 0, 0, 1);
 
-    window_swap_buffers(&window);
+    frame_swap_buffers(&frame);
   }
 
-  window_free(&window);
+  frame_free(&frame);
   
   return 0;
 }

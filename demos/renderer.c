@@ -5,10 +5,10 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "../thirdparty/stb_image.h"
 
-#define WINDOW_IMPLEMENTATION
-#define WINDOW_STB_IMAGE
-#define WINDOW_STB_TRUETYPE
-#include "../src/window.h"
+#define FRAME_IMPLEMENTATION
+#define FRAME_STB_IMAGE
+#define FRAME_STB_TRUETYPE
+#include "../src/frame.h"
 
 #include <stdint.h>
 
@@ -16,8 +16,8 @@
 
 int main() {
   
-  Window window;
-  if(!window_init(&window, 700, 400, "Renderer", 0)) {
+  Frame frame;
+  if(!frame_init(&frame, 700, 400, "Renderer", 0)) {
     return 1;
   }
 
@@ -34,34 +34,34 @@ int main() {
   }
   */
 
-  if(!push_font("C:\\Windows\\Fonts\\arial.ttf", 64.0)) {
+  if(!push_font("C:\\windows\\Fonts\\arial.ttf", 64.0)) {
       return 1;
   }
 
   int64_t time = 0.0f;
 
-  int mouse_x = 0;
-  int mouse_y = 0;
-  Window_Event event;
-  while(window.running) {
-    while(window_peek(&window, &event)) {
-      if(event.type == WINDOW_EVENT_KEYPRESS) {
+  float mouse_x = 0;
+  float mouse_y = 0;
+  Frame_Event event;
+  while(frame.running) {
+    while(frame_peek(&frame, &event)) {
+      if(event.type == FRAME_EVENT_KEYPRESS) {
 	if(event.as.key == 'q') {
-	  window.running = false;	  
+	  frame.running = false;	  
 	} else if(event.as.key == 'k') {
-	  window_toggle_fullscreen(&window);
+	  frame_toggle_fullscreen(&frame);
 	}
       }
     }
-    float widthf  = (float) window.width;
-    float heightf = (float) window.height;
+    float widthf  = (float) frame.width;
+    float heightf = (float) frame.height;
 
-    if(window_get_mouse_position(&window, &mouse_x, &mouse_y)) {
+    if(frame_get_mouse_position(&frame, &mouse_x, &mouse_y)) {
       if(mouse_x > widthf) mouse_x = widthf;
       if(mouse_x < 0) mouse_x = 0;
       if(mouse_y > heightf) mouse_y = heightf;
       if(mouse_y < 0) mouse_y = 0;
-      mouse_y = heightf - mouse_y;
+      mouse_y = mouse_y;
     }
     
     Vec2f uv = vec2f(-1, -1);
@@ -98,10 +98,10 @@ int main() {
 		       factor, vec4f(1, 1, 1, .9) );
 
     char buf[256];
-    snprintf(buf, sizeof(buf), "%d x %d", window.width, window.height);
+    snprintf(buf, sizeof(buf), "%d x %d", frame.width, frame.height);
     draw_text(buf, vec2f(0, heightf - 64.0f * .5f), .5f );
 
-    snprintf(buf, sizeof(buf), "%.2f ms", window.dt);
+    snprintf(buf, sizeof(buf), "%.2f ms", frame.dt);
     draw_text(buf, vec2f(0, heightf - 64.0f * .5f * 2), .5f );
 
     draw_solid_circle(vec2f((float) mouse_x, (float) mouse_y),
@@ -113,10 +113,10 @@ int main() {
 
     draw_solid_rect_angle( vec2f(widthf/2 - 50, heightf/2 - 50), vec2f(100, 100), time * 6 / 4 * PI / 1000 , vec4f(1, 0, 0, .4) );
 	    
-    window_swap_buffers(&window);
+    frame_swap_buffers(&frame);
 
     time += 16;
   }
 
-  window_free(&window);
+  frame_free(&frame);
 }

@@ -5,16 +5,16 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "../thirdparty/stb_image.h"
 
-#define WINDOW_IMPLEMENTATION
-#define WINDOW_STB_TRUETYPE
-#define WINDOW_STB_IMAGE
-#define WINDOW_VERBOSE // log errors
-#include "../src/window.h"
+#define FRAME_IMPLEMENTATION
+#define FRAME_STB_TRUETYPE
+#define FRAME_STB_IMAGE
+#define FRAME_VERBOSE // log errors
+#include "../src/frame.h"
 
 int main() {
   
-    Window window;
-    if(!window_init(&window, 600, 600, "Advanced", 0)) {
+    Frame frame;
+    if(!frame_init(&frame, 600, 600, "Advanced", 0)) {
 	return 1;
     }
 
@@ -37,8 +37,8 @@ int main() {
     
 #define TINT 0.09411764705882353
 
-    window_renderer_set_color(vec4f(TINT, TINT, TINT, 1));
-
+    frame_renderer_set_color(vec4f(TINT, TINT, TINT, 1));
+    
     char buf[1024];
     int buf_size = 0;
 
@@ -53,19 +53,19 @@ int main() {
 
     float out;
     float in  = .2f;
-    Window_Event event;
-    while(window.running) {
-	while(window_peek(&window, &event)) {
+    Frame_Event event;
+    while(frame.running) {
+	while(frame_peek(&frame, &event)) {
 	    switch(event.type) {
-	    case WINDOW_EVENT_KEYPRESS: {
+	    case FRAME_EVENT_KEYPRESS: {
 
 		//printf("key: '%c' (%u)\n", event.as.key, event.as.key); fflush(stdout);
 	  
 		switch(event.as.key) {
-		case WINDOW_ESCAPE: {
-		    window.running = false;
+		case FRAME_ESCAPE: {
+		    frame.running = false;
 		} break;
-		case WINDOW_BACKSPACE: {
+		case FRAME_BACKSPACE: {
 		    backspace_pressed = true;
 		    t_backspace = 0.0f;
 		} break;
@@ -85,9 +85,9 @@ int main() {
 		} break;
 		}
 	    } break;
-	    case WINDOW_EVENT_KEYRELEASE: {
+	    case FRAME_EVENT_KEYRELEASE: {
 		switch(event.as.key) {
-		case WINDOW_BACKSPACE: {
+		case FRAME_BACKSPACE: {
 		    backspace_pressed = false;
 		} break;
 		default: {
@@ -122,8 +122,8 @@ int main() {
 
 	}
 
-	int width = window.width;
-	int height = window.height;
+	int width = frame.width;
+	int height = frame.height;
 
 	//TEXT
 	Vec2f size;
@@ -169,17 +169,17 @@ int main() {
 	}
 	
         const char *text = "Click Me!";
-	if(window_renderer_text_button(text, strlen(text), f, WHITE,
+	if(frame_renderer_text_button(text, strlen(text), f, WHITE,
 				       vec2f(0, 100), vec2f(120, 100), BLUE)) {
 	  buf_size = 0;
 	  in = .2f;
 	}
 
 	//SLIDER
-	float slider_width = window.width/2;
+	float slider_width = frame.width/2;
 	float slider_height = 8.f;
 	
-	if(window_renderer_slider(vec2f(window.width/2 - slider_width/2, window.height/2 - slider_height/2),
+	if(frame_renderer_slider(vec2f(frame.width/2 - slider_width/2, frame.height/2 - slider_height/2),
 				  vec2f(slider_width, slider_height),
 				  RED, WHITE, in, &out)) {
 	  in = out;
@@ -189,11 +189,11 @@ int main() {
 	snprintf(buffer, sizeof(buffer), "%.2f", out);
 	measure_text(buffer, f, &size);
 	draw_text_colored(buffer,
-			  vec2f(window.width/2 - slider_width/2, window.height/2 - slider_height/2 + FONT_SIZE),
+			  vec2f(frame.width/2 - slider_width/2, frame.height/2 - slider_height/2 + FONT_SIZE),
 			  f, WHITE);
 	
 	
-	window_swap_buffers(&window);
+	frame_swap_buffers(&frame);
 
 	t_cursor -= DT;
 	t_cursor_total -= DT;
@@ -210,6 +210,6 @@ int main() {
 	}
     }
 
-    window_free(&window);
+    frame_free(&frame);
 }
 

@@ -1,7 +1,7 @@
-#define WINDOW_IMPLEMENTATION
-#define WINDOW_VERBOSE
-#define WINDOW_NO_RENDERER
-#include "../src/window.h"
+#define FRAME_IMPLEMENTATION
+#define FRAME_VERBOSE
+#define FRAME_NO_RENDERER
+#include "../src/frame.h"
 
 #include <stdio.h>
 #include <assert.h>
@@ -78,8 +78,8 @@ void push_triangle(Vec2f p1, Vec2f p2, Vec2f p3,
 
 int main() {
 
-    Window window;
-    if(!window_init(&window, 800, 800, "Window", 0)) {
+    Frame frame;
+    if(!frame_init(&frame, 800, 800, "Frame", 0)) {
 	return 1;
     }
 
@@ -112,39 +112,39 @@ int main() {
   
     // compile shaders
     GLuint vertex_shader;
-    if(!window_compile_shader(&vertex_shader, GL_VERTEX_SHADER, vertex_shader_source)) {
+    if(!frame_compile_shader(&vertex_shader, GL_VERTEX_SHADER, vertex_shader_source)) {
 	return 1;
     }
 
     GLuint fragment_shader;
-    if(!window_compile_shader(&fragment_shader, GL_FRAGMENT_SHADER, fragment_shader_source)) {
+    if(!frame_compile_shader(&fragment_shader, GL_FRAGMENT_SHADER, fragment_shader_source)) {
 	return 1;
     }
 
     // link program
     GLuint program;
-    if(!window_link_program(&program, vertex_shader, fragment_shader)) {
+    if(!frame_link_program(&program, vertex_shader, fragment_shader)) {
 	return 1;
     }
     glUseProgram(program);
 
     int width, height;
-    int mouse_x = width;
-    int mouse_y = height;
+    float mouse_x = frame.width;
+    float mouse_y = frame.height;
     bool dragging = false;
     
-    Window_Event event;
-    while(window.running) {
-	while(window_peek(&window, &event)) {
-	    if(event.type == WINDOW_EVENT_KEYPRESS && event.as.key == 'Q') window.running = false;
-	    else if(event.type == WINDOW_EVENT_MOUSEPRESS) dragging = true;
-	    else if(event.type == WINDOW_EVENT_MOUSERELEASE) dragging = false;
+    Frame_Event event;
+    while(frame.running) {
+	while(frame_peek(&frame, &event)) {
+	    if(event.type == FRAME_EVENT_KEYPRESS && event.as.key == 'Q') frame.running = false;
+	    else if(event.type == FRAME_EVENT_MOUSEPRESS) dragging = true;
+	    else if(event.type == FRAME_EVENT_MOUSERELEASE) dragging = false;
 	}
 
-	width = window.width;
-        height = window.height;
+	width = frame.width;
+        height = frame.height;
 	if(dragging) {
-	    if(!window_get_mouse_position(&window, &mouse_x, &mouse_y)) return 1;
+	    if(!frame_get_mouse_position(&frame, &mouse_x, &mouse_y)) return 1;
 	    if(mouse_x > width) mouse_x = width;
 	    if(mouse_x < 0) mouse_x = 0;
 	    if(mouse_y > height) mouse_y = height;
@@ -169,7 +169,7 @@ int main() {
 	glUniform1fv(glGetUniformLocation(program, "resolution_y"), 1, &heightf);
 
 	// render triangles:
-	push_triangle(vec2f(0, heightf/2), vec2f(widthf/2, heightf), vec2f((float) mouse_x, heightf - (float) mouse_y),
+	push_triangle(vec2f(0, heightf/2), vec2f(widthf/2, heightf), vec2f((float) mouse_x, (float) mouse_y),
 		      vec4f(1, 0, 0, 1),
 		      vec4f(0, 1, 0, 1),
 		      vec4f(0, 0, 1, 1));
@@ -179,10 +179,10 @@ int main() {
 	glDrawArrays(GL_TRIANGLES, 0, verticies_count);
 	verticies_count = 0;
 
-	window_swap_buffers(&window);
+	frame_swap_buffers(&frame);
     }
 
-    window_free(&window);
+    frame_free(&frame);
   
     return 0;
 }

@@ -97,6 +97,7 @@ FRAME_DEF bool frame_get_mouse_position(Frame *w, float *x, float *y);
 FRAME_DEF void frame_swap_buffers(Frame *w);
 FRAME_DEF bool frame_toggle_fullscreen(Frame *w);
 FRAME_DEF void frame_free(Frame *w);
+FRAME_DEF bool frame_set_title(Frame *f, const char *title);
 FRAME_DEF bool frame_show_cursor(Frame *w, bool show);
 
 FRAME_DEF bool frame_dragged_files_init(Frame_Dragged_Files *files, Frame_Event *event);
@@ -714,6 +715,10 @@ FRAME_DEF bool frame_toggle_fullscreen(Frame *w) {
 FRAME_DEF void frame_free(Frame *w) {	
   ReleaseDC(w->hwnd, w->dc);
   DestroyWindow(w->hwnd);
+}
+
+FRAME_DEF bool frame_set_title(Frame *f, const char *title) {
+  return SetWindowTextA(f->hwnd, title);
 }
 
 FRAME_DEF bool frame_show_cursor(Frame *w, bool show) {
